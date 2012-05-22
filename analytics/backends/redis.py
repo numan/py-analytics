@@ -265,3 +265,14 @@ class Redis(BaseAnalyticsBackend):
             formatted_result_list)
 
         return series, merged_values
+
+    def get_count(self, unique_identifier, metric):
+        """
+        Gets the count for the ``metric`` for ``unique_identifier``
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        """
+        result = self._analytics_backend.get("analy:%s:count:%s" % (unique_identifier, metric))
+
+        return int(result)

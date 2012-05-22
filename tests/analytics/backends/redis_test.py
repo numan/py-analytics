@@ -89,6 +89,31 @@ class TestRedisAnalyticsBackend(object):
         #count should be at 4
         eq_(int(aggregated), 4)
 
+    def test_get_count(self):
+        user_id = 1234
+        metric = "badge:25"
+
+        ok_(self._backend.track_count(user_id, metric))
+
+        keys = self._redis_backend.keys()
+        eq_(len(keys), 1)
+
+        count = self._backend.get_count(user_id, metric)
+
+        #count should be at 1
+        eq_(count, 1)
+
+        #try incrementing by the non default value
+        ok_(self._backend.track_count(user_id, metric, inc_amt=3))
+
+        keys = self._redis_backend.keys()
+        eq_(len(keys), 1)
+
+        count = self._backend.get_count(user_id, metric)
+
+        #count should be at 4
+        eq_(count, 4)
+
     def test_get_closest_week(self):
         """
         Gets the closest Monday to the provided date.
