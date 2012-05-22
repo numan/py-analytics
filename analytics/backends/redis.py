@@ -1,3 +1,5 @@
+from analytics.backends.base import BaseAnalyticsBackend
+
 from nydus.db import create_cluster
 
 from dateutil.relativedelta import relativedelta
@@ -7,35 +9,67 @@ import itertools
 import calendar
 
 
-class RedisAnalyticsBackend(object):
-    def __init__(self, **kwargs):
+class Redis(BaseAnalyticsBackend):
+    def __init__(self, settings, **kwargs):
+        nydus_hosts = {}
+
+        hosts = settings.get("hosts", [])
+        if not hosts:
+            raise Exception("No redis hosts specified")
+
+        for i, host in enumerate(hosts):
+            nydus_hosts[i] = host
+
+        defaults = settings.get("defaults",
+            {
+                'host': 'localhost',
+                'port': 6379,
+            })
+
         self._analytics_backend = create_cluster({
             'engine': 'nydus.db.backends.redis.Redis',
             'router': 'nydus.db.routers.keyvalue.ConsistentHashingRouter',
-            'hosts': {
-                0: {'db': 0},
-            }
+            'hosts': nydus_hosts,
+            'defaults': defaults,
         })
 
     def _get_closest_week(self, metric_date):
+        """
+        Gets the closest monday to the date provided.
+        """
         #find the offset to the closest monday
         days_after_monday = metric_date.isoweekday() - 1
 
         return metric_date - datetime.timedelta(days=days_after_monday)
 
     def _get_daily_metric_key(self, unique_identifier, metric_date):
+        """
+        Redis key for daily metric
+        """
         return "user:%s:analy:%s" % (unique_identifier, metric_date.strftime("%y-%m"),)
 
     def _get_weekly_metric_key(self, unique_identifier, metric_date):
+        """
+        Redis key for weekly metric
+        """
         return "user:%s:analy:%s" % (unique_identifier, metric_date.strftime("%y"),)
 
     def _get_daily_metric_name(self, metric, metric_date):
+        """
+        Hash key for daily metric
+        """
         return "%s:%s" % (metric, metric_date.strftime("%y-%m-%d"),)
 
     def _get_weekly_metric_name(self, metric, metric_date):
+        """
+        Hash key for weekly metric
+        """
         return "%s:%s" % (metric, metric_date.strftime("%y-%m-%d"),)
 
     def _get_monthly_metric_name(self, metric, metric_date):
+        """
+        Hash key for monthly metric
+        """
         return "%s:%s" % (metric, metric_date.strftime("%y-%m"),)
 
     def _get_daily_date_range(self, metric_date, delta):
@@ -70,12 +104,28 @@ class RedisAnalyticsBackend(object):
         return dates
 
     def track_count(self, unique_identifier, metric, inc_amt=1, **kwargs):
+        """
+        Tracks a metric just by count. If you track a metric this way, you won't be able
+        to query the metric by day, week or month.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param inc_amt: The amount you want to increment the ``metric`` for the ``unique_identifier``
+        :return: ``True`` if successful ``False`` otherwise
+        """
         return self._analytics_backend.incr("analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
 
     def track_metric(self, unique_identifier, metric, date, inc_amt=1, **kwargs):
         """
-        Tracks a metric for a specific ``unique_identifier`` for a certain date. This will increment
-        the daily metric as well as the weekly metric.
+        Tracks a metric for a specific ``unique_identifier`` for a certain date.
+
+        TODO: Possibly default date to the current date.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param date: A python date object indicating when this event occured
+        :param inc_amt: The amount you want to increment the ``metric`` for the ``unique_identifier``
+        :return: ``True`` if successful ``False`` otherwise
         """
         hash_key_daily = self._get_daily_metric_key(unique_identifier, date)
         daily_metric_name = self._get_daily_metric_name(metric, date)
@@ -96,7 +146,13 @@ class RedisAnalyticsBackend(object):
 
     def get_metric_by_day(self, unique_identifier, metric, from_date, num_of_days=30):
         """
-        Returns the ``metric`` for ``unique_identifier`` segmented by day in between ``from_date`` to ``to_date``
+        Returns the ``metric`` for ``unique_identifier`` segmented by day
+        starting from``from_date``
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param from_date: A python date object
+        :param num_of_days: The total number of days to retrive starting from ``from_date``
         """
         date_generator = (from_date + datetime.timedelta(days=i) for i in itertools.count())
         metric_key_date_range = self._get_daily_date_range(from_date, datetime.timedelta(days=num_of_days))
@@ -123,7 +179,13 @@ class RedisAnalyticsBackend(object):
 
     def get_metric_by_week(self, unique_identifier, metric, from_date, num_of_weeks=10):
         """
-        Returns the ``metric`` for ``unique_identifier`` segmented by week starting from``from_date``.
+        Returns the ``metric`` for ``unique_identifier`` segmented by week
+        starting from``from_date``
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param from_date: A python date object
+        :param num_of_weeks: The total number of weeks to retrive starting from ``from_date``
         """
         closest_monday_from_date = self._get_closest_week(from_date)
         metric_key_date_range = self._get_weekly_date_range(closest_monday_from_date, datetime.timedelta(weeks=num_of_weeks))
@@ -151,6 +213,16 @@ class RedisAnalyticsBackend(object):
         return series, merged_values
 
     def get_metric_by_month(self, unique_identifier, metric, from_date, num_of_months=10):
+        """
+        Returns the ``metric`` for ``unique_identifier`` segmented by month
+        starting from``from_date``. It will retrieve metrics data starting from the 1st of the
+        month specified in ``from_date``
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param from_date: A python date object
+        :param num_of_months: The total number of months to retrive starting from ``from_date``
+        """
         first_of_month = datetime.date(year=from_date.year, month=from_date.month, day=1)
         metric_key_date_range = self._get_weekly_date_range(first_of_month, \
             relativedelta(months=num_of_months))
@@ -176,8 +248,3 @@ class RedisAnalyticsBackend(object):
             formatted_result_list)
 
         return series, merged_values
-
-    def get_backend(self):
-        return self._analytics_backend
-
-analytics = RedisAnalyticsBackend()

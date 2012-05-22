@@ -15,8 +15,8 @@ Requirements **should** be handled by setuptools, but if they are not, you will 
 
 * nydus
 * redis
+* dateutil
 
 Optional
 ~~~~~~~~
 * hiredis
-
