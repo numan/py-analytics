@@ -161,7 +161,7 @@ class Redis(BaseAnalyticsBackend):
 
         return results[0] and results[1] and results[2] and results[3]
 
-    def get_metric_by_day(self, unique_identifier, metric, from_date, num_of_days=30):
+    def get_metric_by_day(self, unique_identifier, metric, from_date, limit=30):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by day
         starting from``from_date``
@@ -169,12 +169,12 @@ class Redis(BaseAnalyticsBackend):
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track
         :param from_date: A python date object
-        :param num_of_days: The total number of days to retrive starting from ``from_date``
+        :param limit: The total number of days to retrive starting from ``from_date``
         """
         date_generator = (from_date + datetime.timedelta(days=i) for i in itertools.count())
-        metric_key_date_range = self._get_daily_date_range(from_date, datetime.timedelta(days=num_of_days))
+        metric_key_date_range = self._get_daily_date_range(from_date, datetime.timedelta(days=limit))
         #generate a list of mondays in between the start date and the end date
-        series = list(itertools.islice(date_generator, num_of_days))
+        series = list(itertools.islice(date_generator, limit))
 
         metric_keys = [self._get_daily_metric_name(metric, daily_date) for daily_date in series]
 
@@ -194,7 +194,7 @@ class Redis(BaseAnalyticsBackend):
 
         return series, merged_values
 
-    def get_metric_by_week(self, unique_identifier, metric, from_date, num_of_weeks=10):
+    def get_metric_by_week(self, unique_identifier, metric, from_date, limit=10):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by week
         starting from``from_date``
@@ -202,14 +202,14 @@ class Redis(BaseAnalyticsBackend):
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track
         :param from_date: A python date object
-        :param num_of_weeks: The total number of weeks to retrive starting from ``from_date``
+        :param limit: The total number of weeks to retrive starting from ``from_date``
         """
         closest_monday_from_date = self._get_closest_week(from_date)
-        metric_key_date_range = self._get_weekly_date_range(closest_monday_from_date, datetime.timedelta(weeks=num_of_weeks))
+        metric_key_date_range = self._get_weekly_date_range(closest_monday_from_date, datetime.timedelta(weeks=limit))
 
         date_generator = (closest_monday_from_date + datetime.timedelta(days=i) for i in itertools.count(step=7))
         #generate a list of mondays in between the start date and the end date
-        series = list(itertools.islice(date_generator, num_of_weeks))
+        series = list(itertools.islice(date_generator, limit))
 
         metric_keys = [self._get_weekly_metric_name(metric, monday_date) for monday_date in series]
 
@@ -229,7 +229,7 @@ class Redis(BaseAnalyticsBackend):
 
         return series, merged_values
 
-    def get_metric_by_month(self, unique_identifier, metric, from_date, num_of_months=10):
+    def get_metric_by_month(self, unique_identifier, metric, from_date, limit=10):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by month
         starting from``from_date``. It will retrieve metrics data starting from the 1st of the
@@ -238,15 +238,15 @@ class Redis(BaseAnalyticsBackend):
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track
         :param from_date: A python date object
-        :param num_of_months: The total number of months to retrive starting from ``from_date``
+        :param limit: The total number of months to retrive starting from ``from_date``
         """
         first_of_month = datetime.date(year=from_date.year, month=from_date.month, day=1)
         metric_key_date_range = self._get_weekly_date_range(first_of_month, \
-            relativedelta(months=num_of_months))
+            relativedelta(months=limit))
 
         date_generator = (first_of_month + relativedelta(months=i) for i in itertools.count())
         #generate a list of mondays in between the start date and the end date
-        series = list(itertools.islice(date_generator, num_of_months))
+        series = list(itertools.islice(date_generator, limit))
 
         metric_keys = [self._get_monthly_metric_name(metric, month_date) for month_date in series]
 

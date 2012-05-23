@@ -146,7 +146,7 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=6, day=18), inc_amt=3))
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=30)))
 
-        series, values = self._backend.get_metric_by_month(user_id, metric, from_date, num_of_months=5)
+        series, values = self._backend.get_metric_by_month(user_id, metric, from_date, limit=5)
         eq_(len(series), 5)
         eq_(values["2012-04-01"], 7)
         eq_(values["2012-05-01"], 2)
@@ -166,7 +166,7 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=1, day=5), inc_amt=3))
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=7)))
 
-        series, values = self._backend.get_metric_by_month(user_id, metric, from_date, num_of_months=6)
+        series, values = self._backend.get_metric_by_month(user_id, metric, from_date, limit=6)
         eq_(len(series), 6)
         eq_(values["2011-12-01"], 6)
         eq_(values["2012-01-01"], 5)
@@ -187,7 +187,7 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=18), inc_amt=3))
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=30)))
 
-        series, values = self._backend.get_metric_by_week(user_id, metric, from_date, num_of_weeks=5)
+        series, values = self._backend.get_metric_by_week(user_id, metric, from_date, limit=5)
         eq_(len(series), 5)
         eq_(values["2012-04-02"], 4)
         eq_(values["2012-04-09"], 4)
@@ -207,7 +207,7 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=1, day=5), inc_amt=3))
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=7)))
 
-        series, values = self._backend.get_metric_by_week(user_id, metric, from_date, num_of_weeks=6)
+        series, values = self._backend.get_metric_by_week(user_id, metric, from_date, limit=6)
         eq_(len(series), 6)
         eq_(values["2011-11-28"], 0)
         eq_(values["2011-12-05"], 4)
