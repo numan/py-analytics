@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 setup(
     name="analytics",
     license='Apache License 2.0',
-    version="0.1.0",
+    version="0.2.0",
     description="Library for efficiently adding analytics to your project.",
     long_description=open('README.rst', 'r').read(),
     author="Numan Sachwani",
