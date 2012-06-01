@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from nose.tools import ok_, eq_
+from nose.tools import ok_, eq_, raises
 
 from analytics import create_analytic_backend
 
@@ -276,3 +276,9 @@ class TestRedisAnalyticsBackend(object):
         eq_(values["2011-12-05"], 2)
         eq_(values["2011-12-08"], 3)
         eq_(values["2012-01-01"], 5)
+
+    @raises(Exception)
+    def test_get_metrics_invalid_args(self):
+        date = datetime.date(year=2011, month=12, day=1)
+
+        self._backend([], date, group_by="leapyear")

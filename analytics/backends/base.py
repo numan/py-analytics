@@ -46,7 +46,7 @@ class BaseAnalyticsBackend(object):
         """
         raise NotImplementedError()
 
-    def get_metric_by_day(self, unique_identifier, metric, from_date, limit=10):
+    def get_metric_by_day(self, unique_identifier, metric, from_date, limit=10, **kwargs):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by day
         starting from``from_date``
@@ -58,7 +58,7 @@ class BaseAnalyticsBackend(object):
         """
         raise NotImplementedError()
 
-    def get_metric_by_week(self, unique_identifier, metric, from_date, limit=10):
+    def get_metric_by_week(self, unique_identifier, metric, from_date, limit=10, **kwargs):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by week
         starting from``from_date``
@@ -70,7 +70,7 @@ class BaseAnalyticsBackend(object):
         """
         raise NotImplementedError()
 
-    def get_metric_by_month(self, unique_identifier, metric, from_date, limit=10):
+    def get_metric_by_month(self, unique_identifier, metric, from_date, limit=10, **kwargs):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by month
         starting from``from_date``. It will retrieve metrics data starting from the 1st of the
@@ -80,6 +80,15 @@ class BaseAnalyticsBackend(object):
         :param metric: A unique name for the metric you want to track
         :param from_date: A python date object
         :param limit: The total number of months to retrive starting from ``from_date``
+        """
+        raise NotImplementedError()
+
+    def get_count(self, unique_identifier, metric, **kwargs):
+        """
+        Gets the count for the ``metric`` for ``unique_identifier``
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
         """
         raise NotImplementedError()
 

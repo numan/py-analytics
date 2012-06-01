@@ -161,7 +161,7 @@ class Redis(BaseAnalyticsBackend):
 
         return results[0] and results[1] and results[2] and results[3]
 
-    def get_metric_by_day(self, unique_identifier, metric, from_date, limit=30):
+    def get_metric_by_day(self, unique_identifier, metric, from_date, limit=30, **kwargs):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by day
         starting from``from_date``
@@ -171,6 +171,7 @@ class Redis(BaseAnalyticsBackend):
         :param from_date: A python date object
         :param limit: The total number of days to retrive starting from ``from_date``
         """
+        conn = kwargs.get("connection", None)
         date_generator = (from_date + datetime.timedelta(days=i) for i in itertools.count())
         metric_key_date_range = self._get_daily_date_range(from_date, datetime.timedelta(days=limit))
         #generate a list of mondays in between the start date and the end date
@@ -178,9 +179,14 @@ class Redis(BaseAnalyticsBackend):
 
         metric_keys = [self._get_daily_metric_name(metric, daily_date) for daily_date in series]
 
-        with self._analytics_backend.map() as conn:
-            results = [conn.hmget(self._get_daily_metric_key(unique_identifier, \
-                metric_key_date), metric_keys) for metric_key_date in metric_key_date_range]
+        metric_func = lambda conn: [conn.hmget(self._get_daily_metric_key(unique_identifier, \
+                    metric_key_date), metric_keys) for metric_key_date in metric_key_date_range]
+
+        if conn is not None:
+            results = metric_func(conn)
+        else:
+            with self._analytics_backend.map() as conn:
+                results = metric_func(conn)
 
         formatted_result_list = []
         for result in results:
@@ -194,7 +200,7 @@ class Redis(BaseAnalyticsBackend):
 
         return series, merged_values
 
-    def get_metric_by_week(self, unique_identifier, metric, from_date, limit=10):
+    def get_metric_by_week(self, unique_identifier, metric, from_date, limit=10, **kwargs):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by week
         starting from``from_date``
@@ -204,6 +210,7 @@ class Redis(BaseAnalyticsBackend):
         :param from_date: A python date object
         :param limit: The total number of weeks to retrive starting from ``from_date``
         """
+        conn = kwargs.get("connection", None)
         closest_monday_from_date = self._get_closest_week(from_date)
         metric_key_date_range = self._get_weekly_date_range(closest_monday_from_date, datetime.timedelta(weeks=limit))
 
@@ -213,9 +220,14 @@ class Redis(BaseAnalyticsBackend):
 
         metric_keys = [self._get_weekly_metric_name(metric, monday_date) for monday_date in series]
 
-        with self._analytics_backend.map() as conn:
-            results = [conn.hmget(self._get_weekly_metric_key(unique_identifier, \
+        metric_func = lambda conn: [conn.hmget(self._get_weekly_metric_key(unique_identifier, \
                 metric_key_date), metric_keys) for metric_key_date in metric_key_date_range]
+
+        if conn is not None:
+            results = metric_func(conn)
+        else:
+            with self._analytics_backend.map() as conn:
+                results = metric_func(conn)
 
         formatted_result_list = []
         for result in results:
@@ -229,7 +241,7 @@ class Redis(BaseAnalyticsBackend):
 
         return series, merged_values
 
-    def get_metric_by_month(self, unique_identifier, metric, from_date, limit=10):
+    def get_metric_by_month(self, unique_identifier, metric, from_date, limit=10, **kwargs):
         """
         Returns the ``metric`` for ``unique_identifier`` segmented by month
         starting from``from_date``. It will retrieve metrics data starting from the 1st of the
@@ -240,6 +252,7 @@ class Redis(BaseAnalyticsBackend):
         :param from_date: A python date object
         :param limit: The total number of months to retrive starting from ``from_date``
         """
+        conn = kwargs.get("connection", None)
         first_of_month = datetime.date(year=from_date.year, month=from_date.month, day=1)
         metric_key_date_range = self._get_weekly_date_range(first_of_month, \
             relativedelta(months=limit))
@@ -250,9 +263,14 @@ class Redis(BaseAnalyticsBackend):
 
         metric_keys = [self._get_monthly_metric_name(metric, month_date) for month_date in series]
 
-        with self._analytics_backend.map() as conn:
-            results = [conn.hmget(self._get_weekly_metric_key(unique_identifier, \
-                metric_key_date), metric_keys) for metric_key_date in metric_key_date_range]
+        metric_func = lambda conn: [conn.hmget(self._get_weekly_metric_key(unique_identifier, \
+                    metric_key_date), metric_keys) for metric_key_date in metric_key_date_range]
+
+        if conn is not None:
+            results = metric_func(conn)
+        else:
+            with self._analytics_backend.map() as conn:
+                results = metric_func(conn)
 
         formatted_result_list = []
         for result in results:
@@ -266,13 +284,48 @@ class Redis(BaseAnalyticsBackend):
 
         return series, merged_values
 
-    def get_count(self, unique_identifier, metric):
+    def get_metrics(self, metric_identifiers, from_date, limit=10, group_by="week", **kwargs):
+        """
+        Retrieves a multiple metrics as efficiently as possible.
+
+        :param metric_identifiers: a list of tuples of the form `(unique_identifier, metric_name`) identifying which metrics to retrieve.
+        For example [('user:1', 'people_invited',), ('user:2', 'people_invited',), ('user:1', 'comments_posted',), ('user:2', 'comments_posted',)]
+        :param from_date: A python date object
+        :param limit: The total number of months to retrive starting from ``from_date``
+        :param group_by: The type of aggregation to perform on the metric. Choices are: ``day``, ``week`` or ``month``
+        """
+        results = []
+        #validation of types:
+        allowed_types = {"day": self.get_metric_by_day,
+            "week": self.get_metric_by_week,
+            "month": self.get_metric_by_month,
+            }
+        if group_by.lower() not in allowed_types:
+            raise Exception("Allowed values for group_by are day, week or month.")
+
+        group_by_func = allowed_types[group_by.lower()]
+        #pass a connection object so we can pipeline as much as possible
+        with self._analytics_backend.map() as conn:
+            for unique_identifier, metric in metric_identifiers:
+                results.append(group_by_func(unique_identifier, metric, from_date, limit=limit, connection=conn))
+
+        return results
+
+    def get_count(self, unique_identifier, metric, **kwargs):
         """
         Gets the count for the ``metric`` for ``unique_identifier``
 
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track
         """
-        result = self._analytics_backend.get("analy:%s:count:%s" % (unique_identifier, metric))
+        conn = kwargs.get("connection", None)
+        result = None
+
+        metric_func = lambda conn: conn.get("analy:%s:count:%s" % (unique_identifier, metric))
+
+        if conn is not None:
+            result = metric_func(conn)
+        else:
+            result = metric_func(self._analytics_backend)
 
         return int(result)
