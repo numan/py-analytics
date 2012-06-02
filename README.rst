@@ -66,18 +66,25 @@ Example Usage
         },
     })
 
+    year_ago = datetime.date.today() - datetime.timedelta(days=265)
+
     #create some analytics data
-    analytics.track_metric("user:1234", "comment", datetime.date.today())
-    analytics.track_metric("user:1234", "comment", datetime.date.today(), inc_amt=3)
+    analytics.track_metric("user:1234", "comment", year_ago)
+    analytics.track_metric("user:1234", "comment", year_ago, inc_amt=3)
 
     #retrieve analytics data:
-    analytics.get_metric_by_day("user:1234", "comment", datetime.date.today(), limit=20)
-    analytics.get_metric_by_week("user:1234", "comment", datetime.date.today(), limit=10)
-    analytics.get_metric_by_month("user:1234", "comment", datetime.date.today(), limit=6)
+    analytics.get_metric_by_day("user:1234", "comment", year_ago, limit=20)
+    analytics.get_metric_by_week("user:1234", "comment", year_ago, limit=10)
+    analytics.get_metric_by_month("user:1234", "comment", year_ago, limit=6)
 
     #create a counter
     analytics.track_count("user:1245", "login")
     analytics.track_count("user:1245", "login", inc_amt=3)
+
+    #retrieve multiple metrics at the same time
+    #group_by is one of ``month``, ``week`` or ``day``
+    analytics.get_metrics([("user:1234", "login",), ("user:4567", "login",)], year_ago, group_by="day")
+    >> [....]
 
     #retrieve a count
     analytics.get_count("user:1245", "login")
@@ -86,5 +93,5 @@ Example Usage
 TODO
 ----
 
-* Add more backends (MySQL, Postgres, ...)
-* Add an API so it can be deployed as a stand alone service
+* Add more backends (riak, ...)?
+* Add an API so it can be deployed as a stand alone service (http, protocolbuffers, ...)

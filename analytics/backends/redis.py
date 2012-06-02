@@ -120,6 +120,19 @@ class Redis(BaseAnalyticsBackend):
                 month=1, day=1))
         return dates
 
+    def _merger_dict_of_metrics(self, series, list_of_metrics):
+        formatted_result_list = []
+        for result in list_of_metrics:
+            values = {}
+            for index, monday_date in enumerate(series):
+                values[monday_date.strftime("%Y-%m-%d")] = int(result[index]) if result[index] is not None else 0
+            formatted_result_list.append(values)
+
+        merged_values = reduce(lambda a, b: dict((n, a.get(n, 0) + b.get(n, 0)) for n in set(a) | set(b)), \
+            formatted_result_list)
+
+        return merged_values
+
     def track_count(self, unique_identifier, metric, inc_amt=1, **kwargs):
         """
         Tracks a metric just by count. If you track a metric this way, you won't be able
@@ -187,18 +200,9 @@ class Redis(BaseAnalyticsBackend):
         else:
             with self._analytics_backend.map() as conn:
                 results = metric_func(conn)
+            results = self._merger_dict_of_metrics(series, results)
 
-        formatted_result_list = []
-        for result in results:
-            values = {}
-            for index, daily_date in enumerate(series):
-                values[daily_date.strftime("%Y-%m-%d")] = int(result[index]) if result[index] is not None else 0
-            formatted_result_list.append(values)
-
-        merged_values = reduce(lambda a, b: dict((n, a.get(n, 0) + b.get(n, 0)) for n in set(a) | set(b)), \
-            formatted_result_list)
-
-        return series, merged_values
+        return series, results
 
     def get_metric_by_week(self, unique_identifier, metric, from_date, limit=10, **kwargs):
         """
@@ -228,18 +232,9 @@ class Redis(BaseAnalyticsBackend):
         else:
             with self._analytics_backend.map() as conn:
                 results = metric_func(conn)
+            results = self._merger_dict_of_metrics(series, results)
 
-        formatted_result_list = []
-        for result in results:
-            values = {}
-            for index, monday_date in enumerate(series):
-                values[monday_date.strftime("%Y-%m-%d")] = int(result[index]) if result[index] is not None else 0
-            formatted_result_list.append(values)
-
-        merged_values = reduce(lambda a, b: dict((n, a.get(n, 0) + b.get(n, 0)) for n in set(a) | set(b)), \
-            formatted_result_list)
-
-        return series, merged_values
+        return series, results
 
     def get_metric_by_month(self, unique_identifier, metric, from_date, limit=10, **kwargs):
         """
@@ -271,18 +266,9 @@ class Redis(BaseAnalyticsBackend):
         else:
             with self._analytics_backend.map() as conn:
                 results = metric_func(conn)
+            results = self._merger_dict_of_metrics(series, results)
 
-        formatted_result_list = []
-        for result in results:
-            values = {}
-            for index, month_date in enumerate(series):
-                values[month_date.strftime("%Y-%m-%d")] = int(result[index]) if result[index] is not None else 0
-            formatted_result_list.append(values)
-
-        merged_values = reduce(lambda a, b: dict((n, a.get(n, 0) + b.get(n, 0)) for n in set(a) | set(b)), \
-            formatted_result_list)
-
-        return series, merged_values
+        return series, results
 
     def get_metrics(self, metric_identifiers, from_date, limit=10, group_by="week", **kwargs):
         """
@@ -309,7 +295,9 @@ class Redis(BaseAnalyticsBackend):
             for unique_identifier, metric in metric_identifiers:
                 results.append(group_by_func(unique_identifier, metric, from_date, limit=limit, connection=conn))
 
-        return results
+        #we have to merge all the metric results afterwards because we are using a custom context processor
+        return [(series, self._merger_dict_of_metrics(series, list_of_metrics),) for \
+            series, list_of_metrics in results]
 
     def get_count(self, unique_identifier, metric, **kwargs):
         """

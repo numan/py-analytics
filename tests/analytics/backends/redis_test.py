@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from nose.tools import ok_, eq_, raises
+from nose.tools import ok_, eq_, raises, set_trace
 
 from analytics import create_analytic_backend
 
@@ -281,4 +281,65 @@ class TestRedisAnalyticsBackend(object):
     def test_get_metrics_invalid_args(self):
         date = datetime.date(year=2011, month=12, day=1)
 
-        self._backend([], date, group_by="leapyear")
+        self._backend.get_metrics([], date, group_by="leapyear")
+
+    def test_get_metric_by_day(self):
+        date = datetime.date(year=2011, month=12, day=1)
+        user_id = "user1234"
+        metric = "badges:21"
+        metric2 = "badge:22"
+
+        #track some metrics
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=30), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2011, month=12, day=5), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2011, month=12, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2011, month=12, day=30), inc_amt=5))
+
+        results = self._backend.get_metrics([(user_id, metric,), (user_id, metric2,)], date, limit=30, group_by="day")
+
+        #metric
+        eq_(len(results[0][0]), 30)
+        eq_(len(results[0][1].keys()), 30)
+        eq_(results[0][1]["2011-12-05"], 2)
+        eq_(results[0][1]["2011-12-08"], 3)
+        eq_(results[0][1]["2011-12-30"], 5)
+
+        #metric 2
+        eq_(len(results[1][0]), 30)
+        eq_(len(results[1][1].keys()), 30)
+        eq_(results[1][1]["2011-12-05"], 3)
+        eq_(results[1][1]["2011-12-08"], 3)
+        eq_(results[1][1]["2011-12-30"], 5)
+
+    def test_get_metric_by_week(self):
+        user_id = 1234
+        metric = "badge:25"
+        metric2 = "badge:26"
+        from_date = datetime.date(year=2012, month=4, day=2)
+
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=7), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=9), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2012, month=4, day=11), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2012, month=4, day=18), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2012, month=4, day=30)))
+
+        results = self._backend.get_metrics([(user_id, metric,), (user_id, metric2)], from_date, limit=5, group_by="week")
+
+        #metric 1
+        eq_(len(results[0][0]), 5)
+        eq_(results[0][1]["2012-04-02"], 4)
+        eq_(results[0][1]["2012-04-09"], 2)
+        eq_(results[0][1]["2012-04-16"], 0)
+        eq_(results[0][1]["2012-04-23"], 0)
+        eq_(results[0][1]["2012-04-30"], 0)
+
+        #metric 2
+        eq_(len(results[1][0]), 5)
+        eq_(results[1][1]["2012-04-02"], 0)
+        eq_(results[1][1]["2012-04-09"], 2)
+        eq_(results[1][1]["2012-04-16"], 3)
+        eq_(results[1][1]["2012-04-23"], 0)
+        eq_(results[1][1]["2012-04-30"], 1)
