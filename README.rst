@@ -1,5 +1,7 @@
+
 py-analytics
 ============
+
 Py-Analytics is a library designed to make it easy to provide analytics as part of any project.
 
 The project's goal is to make it easy to store and retrieve analytics data. It does not provide
@@ -21,6 +23,7 @@ Requirements **should** be handled by setuptools, but if they are not, you will 
 
 Optional
 ~~~~~~~~
+
 * hiredis
 
 analytics.create_analytic_backend
@@ -47,9 +50,7 @@ Internally, the ``Redis`` analytics backend uses ``nydus`` to distribute your me
 There are two required arguements:
 
 * ``backend``: full path to the backend class, which should extend analytics.backends.base.BaseAnalyticsBackend
-
-* ``settings``: settings required to initialize the backend. For the ``Redis`` backend, this is a list of hosts
-in your redis cluster.
+* ``settings``: settings required to initialize the backend. For the ``Redis`` backend, this is a list of hosts in your redis cluster.
 
 Example Usage
 -------------
