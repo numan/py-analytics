@@ -1,10 +1,11 @@
 from __future__ import absolute_import
 
-from nose.tools import ok_, eq_, raises
+from nose.tools import ok_, eq_, raises, set_trace
 
 from analytics import create_analytic_backend
 
 import datetime
+import itertools
 
 
 class TestRedisAnalyticsBackend(object):
@@ -12,7 +13,7 @@ class TestRedisAnalyticsBackend(object):
         self._backend = create_analytic_backend({
             "backend": "analytics.backends.redis.Redis",
             "settings": {
-                "hosts": [{"db": 5}]
+                "hosts": [{"db": 3}, {"db": 4}, {"db": 5}]
             },
         })
 
@@ -32,6 +33,8 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_metric(user_id, metric, datetime_obj))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         keys.sort()
         eq_(len(keys), 3)
 
@@ -52,6 +55,8 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_metric(user_id, metric, datetime_obj, inc_amt=3))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         keys.sort()
         eq_(len(keys), 3)
 
@@ -71,6 +76,8 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_count(user_id, metric))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 1)
 
         aggregated = self._redis_backend.get("analy:%s:count:%s" % (user_id, metric, ))
@@ -82,6 +89,8 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_count(user_id, metric, inc_amt=3))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 1)
 
         aggregated = self._redis_backend.get("analy:%s:count:%s" % (user_id, metric, ))
@@ -96,6 +105,8 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_count(user_id, metric))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 1)
 
         count = self._backend.get_count(user_id, metric)
@@ -107,6 +118,8 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_count(user_id, metric, inc_amt=3))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 1)
 
         count = self._backend.get_count(user_id, metric)
@@ -119,6 +132,8 @@ class TestRedisAnalyticsBackend(object):
         metric = "badge:25"
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 0)
 
         count = self._backend.get_count(user_id, metric)
@@ -135,12 +150,16 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_count(user_id, metric))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 1)
 
         #try incrementing by the non default value
         ok_(self._backend.track_count(user_id, metric2, inc_amt=3))
 
         keys = self._redis_backend.keys()
+        #flatten list to lists incase we have a cluster of redis servers
+        keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 2)
 
         counts = self._backend.get_counts([(user_id, metric,), (user_id, metric2,), (user_id, does_not_exist,)])
