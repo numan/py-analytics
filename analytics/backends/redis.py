@@ -305,15 +305,35 @@ class Redis(BaseAnalyticsBackend):
 
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track
+        :return: The count for the metric, 0 otherwise
         """
-        conn = kwargs.get("connection", None)
         result = None
 
-        metric_func = lambda conn: conn.get("analy:%s:count:%s" % (unique_identifier, metric))
+        try:
+            result = int(self._analytics_backend.get("analy:%s:count:%s" % (unique_identifier, metric,)))
+        except TypeError:
+            result = 0
 
-        if conn is not None:
-            result = metric_func(conn)
-        else:
-            result = metric_func(self._analytics_backend)
+        return result
 
-        return int(result)
+    def get_counts(self, metric_identifiers, **kwargs):
+        """
+        Retrieves a multiple metrics as efficiently as possible.
+
+        :param metric_identifiers: a list of tuples of the form `(unique_identifier, metric_name`) identifying which metrics to retrieve.
+        For example [('user:1', 'people_invited',), ('user:2', 'people_invited',), ('user:1', 'comments_posted',), ('user:2', 'comments_posted',)]
+        """
+        parsed_results = []
+        with self._analytics_backend.map() as conn:
+            results = [conn.get("analy:%s:count:%s" % (unique_identifier, metric,)) for \
+                unique_identifier, metric in metric_identifiers]
+
+        for result in results:
+            try:
+                parsed_result = int(result)
+            except TypeError:
+                parsed_result = 0
+
+            parsed_results.append(parsed_result)
+
+        return parsed_results

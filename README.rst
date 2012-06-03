@@ -89,6 +89,9 @@ Example Usage
     #retrieve a count
     analytics.get_count("user:1245", "login")
 
+    #retrieve counts
+    analytics.get_counts([("user:1245", "login",), ("user:1245", "logout",)])
+
 
 TODO
 ----

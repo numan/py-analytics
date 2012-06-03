@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from nose.tools import ok_, eq_, raises, set_trace
+from nose.tools import ok_, eq_, raises
 
 from analytics import create_analytic_backend
 
@@ -113,6 +113,43 @@ class TestRedisAnalyticsBackend(object):
 
         #count should be at 4
         eq_(count, 4)
+
+    def test_get_count_invalid_key(self):
+        user_id = 1234
+        metric = "badge:25"
+
+        keys = self._redis_backend.keys()
+        eq_(len(keys), 0)
+
+        count = self._backend.get_count(user_id, metric)
+
+        #count should be at 0
+        eq_(count, 0)
+
+    def test_get_counts(self):
+        user_id = 1234
+        metric = "badge:25"
+        metric2 = "badge:26"
+        does_not_exist = "key:does:not:exist"
+
+        ok_(self._backend.track_count(user_id, metric))
+
+        keys = self._redis_backend.keys()
+        eq_(len(keys), 1)
+
+        #try incrementing by the non default value
+        ok_(self._backend.track_count(user_id, metric2, inc_amt=3))
+
+        keys = self._redis_backend.keys()
+        eq_(len(keys), 2)
+
+        counts = self._backend.get_counts([(user_id, metric,), (user_id, metric2,), (user_id, does_not_exist,)])
+
+        #check the counts for each of the metrics
+        eq_(len(counts), 3)
+        eq_(counts[0], 1)
+        eq_(counts[1], 3)
+        eq_(counts[2], 0)
 
     def test_get_closest_week(self):
         """
