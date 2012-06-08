@@ -72,6 +72,10 @@ Example Usage
     #create some analytics data
     analytics.track_metric("user:1234", "comment", year_ago)
     analytics.track_metric("user:1234", "comment", year_ago, inc_amt=3)
+    #we can even track multiple metrics at the same time for a particular user
+    analytics.track_metric("user:1234", ["comments", "likes"], year_ago)
+    #or track the same metric for multiple users (or a combination or both)
+    analytics.track_metric(["user:1234", "user:4567"], "comment", year_ago)
 
     #retrieve analytics data:
     analytics.get_metric_by_day("user:1234", "comment", year_ago, limit=20)

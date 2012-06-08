@@ -24,6 +24,7 @@ from dateutil.relativedelta import relativedelta
 import datetime
 import itertools
 import calendar
+import types
 
 
 class Redis(BaseAnalyticsBackend):
@@ -147,32 +148,40 @@ class Redis(BaseAnalyticsBackend):
 
     def track_metric(self, unique_identifier, metric, date, inc_amt=1, **kwargs):
         """
-        Tracks a metric for a specific ``unique_identifier`` for a certain date.
+        Tracks a metric for a specific ``unique_identifier`` for a certain date. The redis backend supports
+        lists for both ``unique_identifier`` and ``metric`` allowing for tracking of multiple metrics for multiple
+        unique_identifiers efficiently. Not all backends may support this.
 
         TODO: Possibly default date to the current date.
 
         :param unique_identifier: Unique string indetifying the object this metric is for
-        :param metric: A unique name for the metric you want to track
+        :param metric: A unique name for the metric you want to track. This can be a list or a string.
         :param date: A python date object indicating when this event occured
         :param inc_amt: The amount you want to increment the ``metric`` for the ``unique_identifier``
         :return: ``True`` if successful ``False`` otherwise
         """
-        hash_key_daily = self._get_daily_metric_key(unique_identifier, date)
-        daily_metric_name = self._get_daily_metric_name(metric, date)
-
-        closest_monday = self._get_closest_week(date)
-        hash_key_weekly = self._get_weekly_metric_key(unique_identifier, date)
-        weekly_metric_name = self._get_weekly_metric_name(metric, closest_monday)
-        monthly_metric_name = self._get_monthly_metric_name(metric, date)
-
+        metric = [metric] if isinstance(metric, basestring) else metric
+        unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
+        results = []
         with self._analytics_backend.map() as conn:
-            results = [conn.hincrby(hash_key_daily, daily_metric_name, inc_amt),\
-                conn.hincrby(hash_key_weekly, weekly_metric_name, inc_amt),\
-                conn.hincrby(hash_key_weekly, monthly_metric_name, inc_amt),\
-                conn.incr("analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
-            ]
+            for uid in unique_identifier:
 
-        return results[0] and results[1] and results[2] and results[3]
+                hash_key_daily = self._get_daily_metric_key(uid, date)
+                closest_monday = self._get_closest_week(date)
+                hash_key_weekly = self._get_weekly_metric_key(uid, date)
+
+                for single_metric in metric:
+                    daily_metric_name = self._get_daily_metric_name(single_metric, date)
+                    weekly_metric_name = self._get_weekly_metric_name(single_metric, closest_monday)
+                    monthly_metric_name = self._get_monthly_metric_name(single_metric, date)
+
+                    results.append([conn.hincrby(hash_key_daily, daily_metric_name, inc_amt),\
+                        conn.hincrby(hash_key_weekly, weekly_metric_name, inc_amt),\
+                        conn.hincrby(hash_key_weekly, monthly_metric_name, inc_amt),\
+                        conn.incr("analy:%s:count:%s" % (uid, single_metric), inc_amt)
+                    ])
+
+        return results
 
     def get_metric_by_day(self, unique_identifier, metric, from_date, limit=30, **kwargs):
         """
