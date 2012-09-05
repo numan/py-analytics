@@ -315,29 +315,90 @@ class TestRedisAnalyticsBackend(object):
         eq_(values["2011-12-08"], 3)
         eq_(values["2011-12-30"], 5)
 
-    def test_metric_by_day_spans_month_year_boundry(self):
-        date = datetime.date(year=2011, month=12, day=1)
+    def test_metric_by_count_start_end_date(self):
+        start_date = datetime.date(year=2011, month=9, day=1)
+        end_date = datetime.date(year=2011, month=11, day=1)
         user_id = "user1234"
         metric = "badges:21"
 
         #track some metrics
-        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=5), inc_amt=2))
-        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=8), inc_amt=3))
-        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=1, day=1), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=5, day=30), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=7, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=8, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=9, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=10, day=1), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=11, day=5), inc_amt=2))
 
-        series, values = self._backend.get_metric_by_day(user_id, metric, date, 35)
+        count = self._backend.get_count(user_id, metric, start_date=start_date, end_date=end_date)
+        eq_(count, 8)
 
-        eq_(len(series), 35)
-        eq_(len(values.keys()), 35)
-        eq_(values["2011-12-05"], 2)
-        eq_(values["2011-12-08"], 3)
-        eq_(values["2012-01-01"], 5)
+    def test_metric_by_count_start_end_date_within_a_month(self):
+        start_date = datetime.date(year=2011, month=9, day=1)
+        end_date = datetime.date(year=2011, month=9, day=15)
+        user_id = "user1234"
+        metric = "badges:21"
+
+        #track some metrics
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=5, day=30), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=7, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=8, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=9, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=10, day=1), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=11, day=5), inc_amt=2))
+
+        count = self._backend.get_count(user_id, metric, start_date=start_date, end_date=end_date)
+        eq_(count, 3)
+
+    def test_metric_by_count_start_end_date_with_metric_on_end_date(self):
+        start_date = datetime.date(year=2011, month=9, day=1)
+        end_date = datetime.date(year=2011, month=9, day=8)
+        user_id = "user1234"
+        metric = "badges:21"
+
+        #track some metrics
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=5, day=30), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=7, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=8, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=9, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=10, day=1), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=11, day=5), inc_amt=2))
+
+        count = self._backend.get_count(user_id, metric, start_date=start_date, end_date=end_date)
+        eq_(count, 3)
+
+    def test_metric_by_count_start_end_date_with_metric_on_start_date(self):
+        start_date = datetime.date(year=2011, month=9, day=8)
+        end_date = datetime.date(year=2011, month=9, day=15)
+        user_id = "user1234"
+        metric = "badges:21"
+
+        #track some metrics
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=5, day=30), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=7, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=8, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=9, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=10, day=1), inc_amt=5))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=11, day=5), inc_amt=2))
+
+        count = self._backend.get_count(user_id, metric, start_date=start_date, end_date=end_date)
+        eq_(count, 3)
 
     @raises(Exception)
     def test_get_metrics_invalid_args(self):
         date = datetime.date(year=2011, month=12, day=1)
 
         self._backend.get_metrics([], date, group_by="leapyear")
+
+    def test_get_count_in_time_period(self):
+        date = datetime.date(year=2011, month=12, day=1)
+        user_id = "user1234"
+        metric = "badges:21"
+        metric2 = "badge:22"
+
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=7), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=9), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2012, month=4, day=11), inc_amt=2))
 
     def test_get_metrics_by_day(self):
         date = datetime.date(year=2011, month=12, day=1)

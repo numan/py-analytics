@@ -20,6 +20,7 @@ from analytics.backends.base import BaseAnalyticsBackend
 from nydus.db import create_cluster
 
 from dateutil.relativedelta import relativedelta
+from dateutil import rrule
 
 import datetime
 import itertools
@@ -308,7 +309,7 @@ class Redis(BaseAnalyticsBackend):
         return [(series, self._merger_dict_of_metrics(series, list_of_metrics),) for \
             series, list_of_metrics in results]
 
-    def get_count(self, unique_identifier, metric, **kwargs):
+    def get_count(self, unique_identifier, metric, start_date=None, end_date=None, **kwargs):
         """
         Gets the count for the ``metric`` for ``unique_identifier``
 
@@ -317,11 +318,37 @@ class Redis(BaseAnalyticsBackend):
         :return: The count for the metric, 0 otherwise
         """
         result = None
+        if start_date and end_date:
+            start_date, end_date = (start_date, end_date,) if start_date < end_date else (end_date, start_date,)
 
-        try:
-            result = int(self._analytics_backend.get("analy:%s:count:%s" % (unique_identifier, metric,)))
-        except TypeError:
-            result = 0
+            start_date = start_date if hasattr(start_date, 'date') else datetime.datetime.combine(start_date, datetime.time())
+            end_date = end_date if hasattr(end_date, 'date') else datetime.datetime.combine(end_date, datetime.time())
+
+            monthly_metrics_dates = list(rrule.rrule(rrule.MONTHLY, dtstart=start_date, bymonthday=1, until=end_date))
+
+            #We can sorta optimize this by getting most of the data by month
+            if len(monthly_metrics_dates) >= 3:
+                start_diff = monthly_metrics_dates[0] - start_date
+                end_diff = end_date - monthly_metrics_dates[-1]
+
+                with self._analytics_backend.map() as conn:
+                    monthly_metric_results = self.get_metric_by_month(unique_identifier, metric, monthly_metrics_dates[0], limit=len(monthly_metrics_dates) - 1, conn=conn)
+
+                    #get the difference from the date to the start date and get all dates in between
+                    starting_metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=start_diff.days, conn=conn)
+                    ending_metric_results = self.get_metric_by_day(unique_identifier, metric, monthly_metrics_dates[-1], limit=end_diff.days + 1, conn=conn)
+
+                result = sum(monthly_metric_results[1].values()) + sum(starting_metric_results[1].values()) + sum(ending_metric_results[1].values())
+            else:
+                diff = end_date - start_date
+                metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=diff.days + 1)
+                result = sum(metric_results[1].values())
+
+        else:
+            try:
+                result = int(self._analytics_backend.get("analy:%s:count:%s" % (unique_identifier, metric,)))
+            except TypeError:
+                result = 0
 
         return result
 

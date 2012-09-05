@@ -94,6 +94,9 @@ Example Usage
     #retrieve a count
     analytics.get_count("user:1245", "login")
 
+    #retrieve a count between 2 dates
+    analytics.get_count("user:1245", "login", start_date=datetime.date(month=1, day=5, year=2011), end_date=datetime.date(month=5, day=15, year=2011))
+
     #retrieve counts
     analytics.get_counts([("user:1245", "login",), ("user:1245", "logout",)])
 
@@ -101,5 +104,5 @@ Example Usage
 TODO
 ----
 
-* Add more backends (riak, ...)?
+* Add more backends possibly...?
 * Add an API so it can be deployed as a stand alone service (http, protocolbuffers, ...)
