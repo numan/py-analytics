@@ -332,13 +332,17 @@ class Redis(BaseAnalyticsBackend):
                 end_diff = end_date - monthly_metrics_dates[-1]
 
                 with self._analytics_backend.map() as conn:
-                    monthly_metric_results = self.get_metric_by_month(unique_identifier, metric, monthly_metrics_dates[0], limit=len(monthly_metrics_dates) - 1, conn=conn)
+                    monthly_metric_series, monthly_metric_results = self.get_metric_by_month(unique_identifier, metric, monthly_metrics_dates[0], limit=len(monthly_metrics_dates) - 1, connection=conn)
 
                     #get the difference from the date to the start date and get all dates in between
-                    starting_metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=start_diff.days, conn=conn)
-                    ending_metric_results = self.get_metric_by_day(unique_identifier, metric, monthly_metrics_dates[-1], limit=end_diff.days + 1, conn=conn)
+                    starting_metric_series, starting_metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=start_diff.days, connection=conn) if start_diff.days > 0 else ([], [[]],)
+                    ending_metric_series, ending_metric_results = self.get_metric_by_day(unique_identifier, metric, monthly_metrics_dates[-1], limit=end_diff.days + 1, connection=conn)
 
-                result = sum(monthly_metric_results[1].values()) + sum(starting_metric_results[1].values()) + sum(ending_metric_results[1].values())
+                monthly_metric_results = self._merger_dict_of_metrics(monthly_metric_series, monthly_metric_results)
+                starting_metric_results = self._merger_dict_of_metrics(starting_metric_series, starting_metric_results)
+                ending_metric_results = self._merger_dict_of_metrics(ending_metric_series, ending_metric_results)
+
+                result = sum(monthly_metric_results.values()) + sum(starting_metric_results.values()) + sum(ending_metric_results.values())
             else:
                 diff = end_date - start_date
                 metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=diff.days + 1)
