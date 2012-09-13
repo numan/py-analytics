@@ -332,6 +332,15 @@ class TestRedisAnalyticsBackend(object):
         count = self._backend.get_count(user_id, metric, start_date=start_date, end_date=end_date)
         eq_(count, 8)
 
+    def test_parse_and_process_metrics(self):
+        series = [datetime.datetime(year=2011, month=5, day=30), datetime.datetime(year=2011, month=7, day=8), datetime.datetime(year=2011, month=8, day=5),
+            datetime.datetime(year=2011, month=9, day=8), datetime.datetime(year=2011, month=9, day=8), datetime.datetime(year=2011, month=10, day=1)]
+        metrics = [[None, None, None, None, None, None]]
+
+        new_series, new_metrics = self._backend._parse_and_process_metrics(series, metrics)
+        eq_(set(['2011-10-01', '2011-07-08', '2011-09-08', '2011-08-05', '2011-05-30']), new_series)
+        eq_({'2011-10-01': 0, '2011-07-08': 0, '2011-09-08': 0, '2011-08-05': 0, '2011-05-30': 0}, new_metrics)
+
     def test_metric_by_count_start_end_date_within_a_month(self):
         start_date = datetime.date(year=2011, month=9, day=1)
         end_date = datetime.date(year=2011, month=9, day=15)

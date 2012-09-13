@@ -122,18 +122,19 @@ class Redis(BaseAnalyticsBackend):
                 month=1, day=1))
         return dates
 
-    def _merger_dict_of_metrics(self, series, list_of_metrics):
+    def _parse_and_process_metrics(self, series, list_of_metrics):
         formatted_result_list = []
+        series = [dt.strftime("%Y-%m-%d") for dt in series]
         for result in list_of_metrics:
             values = {}
-            for index, monday_date in enumerate(series):
-                values[monday_date.strftime("%Y-%m-%d")] = int(result[index]) if result[index] is not None else 0
+            for index, date_string in enumerate(series):
+                values[date_string] = int(result[index]) if result[index] is not None else 0
             formatted_result_list.append(values)
 
         merged_values = reduce(lambda a, b: dict((n, a.get(n, 0) + b.get(n, 0)) for n in set(a) | set(b)), \
             formatted_result_list)
 
-        return merged_values
+        return set(series), merged_values
 
     def track_count(self, unique_identifier, metric, inc_amt=1, **kwargs):
         """
@@ -210,7 +211,7 @@ class Redis(BaseAnalyticsBackend):
         else:
             with self._analytics_backend.map() as conn:
                 results = metric_func(conn)
-            results = self._merger_dict_of_metrics(series, results)
+            series, results = self._parse_and_process_metrics(series, results)
 
         return series, results
 
@@ -242,7 +243,7 @@ class Redis(BaseAnalyticsBackend):
         else:
             with self._analytics_backend.map() as conn:
                 results = metric_func(conn)
-            results = self._merger_dict_of_metrics(series, results)
+            series, results = self._parse_and_process_metrics(series, results)
 
         return series, results
 
@@ -276,7 +277,7 @@ class Redis(BaseAnalyticsBackend):
         else:
             with self._analytics_backend.map() as conn:
                 results = metric_func(conn)
-            results = self._merger_dict_of_metrics(series, results)
+            series, results = self._parse_and_process_metrics(series, results)
 
         return series, results
 
@@ -306,7 +307,7 @@ class Redis(BaseAnalyticsBackend):
                 results.append(group_by_func(unique_identifier, metric, from_date, limit=limit, connection=conn))
 
         #we have to merge all the metric results afterwards because we are using a custom context processor
-        return [(series, self._merger_dict_of_metrics(series, list_of_metrics),) for \
+        return [self._parse_and_process_metrics(series, list_of_metrics) for \
             series, list_of_metrics in results]
 
     def get_count(self, unique_identifier, metric, start_date=None, end_date=None, **kwargs):
@@ -338,9 +339,9 @@ class Redis(BaseAnalyticsBackend):
                     starting_metric_series, starting_metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=start_diff.days, connection=conn) if start_diff.days > 0 else ([], [[]],)
                     ending_metric_series, ending_metric_results = self.get_metric_by_day(unique_identifier, metric, monthly_metrics_dates[-1], limit=end_diff.days + 1, connection=conn)
 
-                monthly_metric_results = self._merger_dict_of_metrics(monthly_metric_series, monthly_metric_results)
-                starting_metric_results = self._merger_dict_of_metrics(starting_metric_series, starting_metric_results)
-                ending_metric_results = self._merger_dict_of_metrics(ending_metric_series, ending_metric_results)
+                monthly_metric_series, monthly_metric_results = self._parse_and_process_metrics(monthly_metric_series, monthly_metric_results)
+                starting_metric_series, starting_metric_results = self._parse_and_process_metrics(starting_metric_series, starting_metric_results)
+                ending_metric_series, ending_metric_results = self._parse_and_process_metrics(ending_metric_series, ending_metric_results)
 
                 result = sum(monthly_metric_results.values()) + sum(starting_metric_results.values()) + sum(ending_metric_results.values())
             else:
