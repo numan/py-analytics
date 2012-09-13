@@ -101,6 +101,14 @@ Example Usage
     analytics.get_counts([("user:1245", "login",), ("user:1245", "logout",)])
 
 
+BACKWARDS INCOMPATIBLE CHANGES
+-------------------------------
+
+v0.5.2
+~~~~~~
+* ``get_metric_by_day``, ``get_metric_by_week`` and ``get_metric_by_month`` return ``series`` as a set of strings instead of a list of date/datetime objects
+
+
 TODO
 ----
 
