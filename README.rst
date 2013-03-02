@@ -2,6 +2,9 @@
 py-analytics
 ============
 
+.. image:: https://secure.travis-ci.org/numan/py-analytics.png?branch=master
+        :target: https://secure.travis-ci.org/numan/py-analytics
+
 Py-Analytics is a library designed to make it easy to provide analytics as part of any project.
 
 The project's goal is to make it easy to store and retrieve analytics data. It does not provide
