@@ -20,6 +20,9 @@ under the License.
 class BaseAnalyticsBackend(object):
     _analytics_backend = None
 
+    def __init__(self, settings, **kwargs):
+        pass
+
     def track_count(self, unique_identifier, metric, inc_amt=1, **kwargs):
         """
         Tracks a metric just by count. If you track a metric this way, you won't be able
@@ -30,7 +33,7 @@ class BaseAnalyticsBackend(object):
         :param inc_amt: The amount you want to increment the ``metric`` for the ``unique_identifier``
         :return: ``True`` if successful ``False`` otherwise
         """
-        return self._analytics_backend.incr("analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
+        return NotImplementedError()
 
     def track_metric(self, unique_identifier, metric, date, inc_amt=1, **kwargs):
         """
@@ -83,12 +86,33 @@ class BaseAnalyticsBackend(object):
         """
         raise NotImplementedError()
 
+    def get_metrics(self, metric_identifiers, from_date, limit=10, group_by="week", **kwargs):
+        """
+        Retrieves a multiple metrics as efficiently as possible.
+
+        :param metric_identifiers: a list of tuples of the form `(unique_identifier, metric_name`) identifying which metrics to retrieve.
+        For example [('user:1', 'people_invited',), ('user:2', 'people_invited',), ('user:1', 'comments_posted',), ('user:2', 'comments_posted',)]
+        :param from_date: A python date object
+        :param limit: The total number of months to retrive starting from ``from_date``
+        :param group_by: The type of aggregation to perform on the metric. Choices are: ``day``, ``week`` or ``month``
+        """
+        raise NotImplementedError()
+
     def get_count(self, unique_identifier, metric, **kwargs):
         """
         Gets the count for the ``metric`` for ``unique_identifier``
 
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track
+        """
+        raise NotImplementedError()
+
+    def get_counts(self, metric_identifiers, **kwargs):
+        """
+        Retrieves a multiple metrics as efficiently as possible.
+
+        :param metric_identifiers: a list of tuples of the form `(unique_identifier, metric_name`) identifying which metrics to retrieve.
+        For example [('user:1', 'people_invited',), ('user:2', 'people_invited',), ('user:1', 'comments_posted',), ('user:2', 'comments_posted',)]
         """
         raise NotImplementedError()
 
