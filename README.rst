@@ -103,9 +103,16 @@ Example Usage
     #retrieve counts
     analytics.get_counts([("user:1245", "login",), ("user:1245", "logout",)])
 
+    #clear out everything we created
+    analytics.clear_all()
+
 
 BACKWARDS INCOMPATIBLE CHANGES
 -------------------------------
+
+V0.6.0
+~~~~~~
+* This version introduces prefixes. Any old analytics data will be unaccessable.
 
 v0.5.2
 ~~~~~~
