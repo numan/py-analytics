@@ -19,9 +19,11 @@ under the License.
 
 class BaseAnalyticsBackend(object):
     _analytics_backend = None
+    _prefix = "_analytics"
 
     def __init__(self, settings, **kwargs):
-        pass
+        if "prefix" in kwargs:
+            self._prefix = kwargs.get("prefix")
 
     def track_count(self, unique_identifier, metric, inc_amt=1, **kwargs):
         """

@@ -39,7 +39,8 @@ class Redis(BaseAnalyticsBackend):
         for i, host in enumerate(hosts):
             nydus_hosts[i] = host
 
-        defaults = settings.get("defaults",
+        defaults = settings.get(
+            "defaults",
             {
                 'host': 'localhost',
                 'port': 6379,
@@ -51,6 +52,7 @@ class Redis(BaseAnalyticsBackend):
             'hosts': nydus_hosts,
             'defaults': defaults,
         })
+        super(Redis, self).__init__(settings, **kwargs)
 
     def _get_closest_week(self, metric_date):
         """
@@ -65,13 +67,13 @@ class Redis(BaseAnalyticsBackend):
         """
         Redis key for daily metric
         """
-        return "user:%s:analy:%s" % (unique_identifier, metric_date.strftime("%y-%m"),)
+        return self._prefix + ":" + "user:%s:analy:%s" % (unique_identifier, metric_date.strftime("%y-%m"),)
 
     def _get_weekly_metric_key(self, unique_identifier, metric_date):
         """
         Redis key for weekly metric
         """
-        return "user:%s:analy:%s" % (unique_identifier, metric_date.strftime("%y"),)
+        return self._prefix + ":" + "user:%s:analy:%s" % (unique_identifier, metric_date.strftime("%y"),)
 
     def _get_daily_metric_name(self, metric, metric_date):
         """
@@ -118,8 +120,9 @@ class Redis(BaseAnalyticsBackend):
         spanning_years = end_date.year - metric_date.year
         for i in range(spanning_years):
             #for the weekly keys, we only care about the year
-            dates.append(datetime.date(year=metric_date.year + (i + 1), \
-                month=1, day=1))
+            dates.append(
+                datetime.date(
+                    year=metric_date.year + (i + 1), month=1, day=1))
         return dates
 
     def _parse_and_process_metrics(self, series, list_of_metrics):
@@ -131,10 +134,26 @@ class Redis(BaseAnalyticsBackend):
                 values[date_string] = int(result[index]) if result[index] is not None else 0
             formatted_result_list.append(values)
 
-        merged_values = reduce(lambda a, b: dict((n, a.get(n, 0) + b.get(n, 0)) for n in set(a) | set(b)), \
+        merged_values = reduce(
+            lambda a, b: dict((n, a.get(n, 0) + b.get(n, 0)) for n in set(a) | set(b)),
             formatted_result_list)
 
         return set(series), merged_values
+
+    def clear_all(self):
+        """
+        Deletes all ``sandsnake`` related data from redis.
+
+        .. warning::
+
+            Very expensive and destructive operation. Use with causion
+        """
+        keys = self._analytics_backend.keys()
+
+        for key in itertools.chain(*keys):
+            with self._analytics_backend.map() as conn:
+                if key.startswith(self._prefix):
+                    conn.delete(key)
 
     def track_count(self, unique_identifier, metric, inc_amt=1, **kwargs):
         """
@@ -146,7 +165,7 @@ class Redis(BaseAnalyticsBackend):
         :param inc_amt: The amount you want to increment the ``metric`` for the ``unique_identifier``
         :return: ``True`` if successful ``False`` otherwise
         """
-        return self._analytics_backend.incr("analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
+        return self._analytics_backend.incr(self._prefix + ":" + "analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
 
     def track_metric(self, unique_identifier, metric, date, inc_amt=1, **kwargs):
         """
@@ -177,11 +196,14 @@ class Redis(BaseAnalyticsBackend):
                     weekly_metric_name = self._get_weekly_metric_name(single_metric, closest_monday)
                     monthly_metric_name = self._get_monthly_metric_name(single_metric, date)
 
-                    results.append([conn.hincrby(hash_key_daily, daily_metric_name, inc_amt),\
-                        conn.hincrby(hash_key_weekly, weekly_metric_name, inc_amt),\
-                        conn.hincrby(hash_key_weekly, monthly_metric_name, inc_amt),\
-                        conn.incr("analy:%s:count:%s" % (uid, single_metric), inc_amt)
-                    ])
+                    results.append(
+                        [
+                            conn.hincrby(hash_key_daily, daily_metric_name, inc_amt),
+                            conn.hincrby(hash_key_weekly, weekly_metric_name, inc_amt),
+                            conn.hincrby(hash_key_weekly, monthly_metric_name, inc_amt),
+                            conn.incr(self._prefix + ":" + "analy:%s:count:%s" % (uid, single_metric), inc_amt)
+                        ]
+                    )
 
         return results
 
@@ -260,8 +282,8 @@ class Redis(BaseAnalyticsBackend):
         """
         conn = kwargs.get("connection", None)
         first_of_month = datetime.date(year=from_date.year, month=from_date.month, day=1)
-        metric_key_date_range = self._get_weekly_date_range(first_of_month, \
-            relativedelta(months=limit))
+        metric_key_date_range = self._get_weekly_date_range(
+            first_of_month, relativedelta(months=limit))
 
         date_generator = (first_of_month + relativedelta(months=i) for i in itertools.count())
         #generate a list of mondays in between the start date and the end date
@@ -269,8 +291,9 @@ class Redis(BaseAnalyticsBackend):
 
         metric_keys = [self._get_monthly_metric_name(metric, month_date) for month_date in series]
 
-        metric_func = lambda conn: [conn.hmget(self._get_weekly_metric_key(unique_identifier, \
-                    metric_key_date), metric_keys) for metric_key_date in metric_key_date_range]
+        metric_func = lambda conn: [conn.hmget(
+            self._get_weekly_metric_key(
+                unique_identifier, metric_key_date), metric_keys) for metric_key_date in metric_key_date_range]
 
         if conn is not None:
             results = metric_func(conn)
@@ -293,10 +316,11 @@ class Redis(BaseAnalyticsBackend):
         """
         results = []
         #validation of types:
-        allowed_types = {"day": self.get_metric_by_day,
+        allowed_types = {
+            "day": self.get_metric_by_day,
             "week": self.get_metric_by_week,
             "month": self.get_metric_by_month,
-            }
+        }
         if group_by.lower() not in allowed_types:
             raise Exception("Allowed values for group_by are day, week or month.")
 
@@ -307,7 +331,8 @@ class Redis(BaseAnalyticsBackend):
                 results.append(group_by_func(unique_identifier, metric, from_date, limit=limit, connection=conn))
 
         #we have to merge all the metric results afterwards because we are using a custom context processor
-        return [self._parse_and_process_metrics(series, list_of_metrics) for \
+        return [
+            self._parse_and_process_metrics(series, list_of_metrics) for
             series, list_of_metrics in results]
 
     def get_count(self, unique_identifier, metric, start_date=None, end_date=None, **kwargs):
@@ -351,7 +376,7 @@ class Redis(BaseAnalyticsBackend):
 
         else:
             try:
-                result = int(self._analytics_backend.get("analy:%s:count:%s" % (unique_identifier, metric,)))
+                result = int(self._analytics_backend.get(self._prefix + ":" + "analy:%s:count:%s" % (unique_identifier, metric,)))
             except TypeError:
                 result = 0
 
@@ -366,7 +391,8 @@ class Redis(BaseAnalyticsBackend):
         """
         parsed_results = []
         with self._analytics_backend.map() as conn:
-            results = [conn.get("analy:%s:count:%s" % (unique_identifier, metric,)) for \
+            results = [
+                conn.get(self._prefix + ":" + "analy:%s:count:%s" % (unique_identifier, metric,)) for
                 unique_identifier, metric in metric_identifiers]
 
         for result in results:

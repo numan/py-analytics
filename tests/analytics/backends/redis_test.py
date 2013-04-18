@@ -40,7 +40,7 @@ class TestRedisAnalyticsBackend(object):
 
         daily = self._redis_backend.hgetall(keys[2])
         weekly = self._redis_backend.hgetall(keys[1])
-        aggregated = self._redis_backend.get("analy:%s:count:%s" % (user_id, metric, ))
+        aggregated = self._redis_backend.get(self._backend._prefix + ":" + "analy:%s:count:%s" % (user_id, metric, ))
 
         #each metric should be at 1
         [eq_(int(value), 1) for value in daily.values()]
@@ -62,7 +62,7 @@ class TestRedisAnalyticsBackend(object):
 
         daily = self._redis_backend.hgetall(keys[2])
         weekly = self._redis_backend.hgetall(keys[1])
-        aggregated = self._redis_backend.get("analy:%s:count:%s" % (user_id, metric, ))
+        aggregated = self._redis_backend.get(self._backend._prefix + ":" + "analy:%s:count:%s" % (user_id, metric, ))
 
         #each metric should be at 4
         [eq_(int(value), 4) for value in daily.values()]
@@ -80,7 +80,7 @@ class TestRedisAnalyticsBackend(object):
         keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 1)
 
-        aggregated = self._redis_backend.get("analy:%s:count:%s" % (user_id, metric, ))
+        aggregated = self._redis_backend.get(self._backend._prefix + ":" + "analy:%s:count:%s" % (user_id, metric, ))
 
         #count should be at 1
         eq_(int(aggregated), 1)
@@ -93,7 +93,7 @@ class TestRedisAnalyticsBackend(object):
         keys = list(itertools.chain.from_iterable(keys))
         eq_(len(keys), 1)
 
-        aggregated = self._redis_backend.get("analy:%s:count:%s" % (user_id, metric, ))
+        aggregated = self._redis_backend.get(self._backend._prefix + ":" + "analy:%s:count:%s" % (user_id, metric, ))
 
         #count should be at 4
         eq_(int(aggregated), 4)
@@ -169,6 +169,27 @@ class TestRedisAnalyticsBackend(object):
         eq_(counts[0], 1)
         eq_(counts[1], 3)
         eq_(counts[2], 0)
+
+    def test_clear_all(self):
+        user_id = 1234
+        metric = "badge:25"
+
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=7), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=9), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=5, day=11), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=6, day=18), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=30)))
+
+        redis_client = self._backend.get_backend()
+        #keys not matching the prefix should not be deleted
+        redis_client.set("foo", "bar")
+
+        ok_(not len(list(itertools.chain(*redis_client.keys()))) == 0)
+
+        self._backend.clear_all()
+
+        ok_(len(list(itertools.chain(*redis_client.keys()))) == 1)
 
     def test_get_closest_week(self):
         """
