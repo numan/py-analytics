@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 setup(
     name="analytics",
     license='Apache License 2.0',
-    version="0.6.0",
+    version="0.6.1",
     description="Library for efficiently adding analytics to your project.",
     long_description=open('README.rst', 'r').read(),
     author="Numan Sachwani",
@@ -15,7 +15,7 @@ setup(
     test_suite='nose.collector',
     install_requires=[
         'nydus>=0.10.5',
-        'redis==2.6.0',
+        'redis>=2.7.2',
         'python-dateutil==1.5',
     ],
     tests_require=[
