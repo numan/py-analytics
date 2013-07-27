@@ -22,7 +22,7 @@ You can install the latest official stable version using pypi:
 Or get the latest version directly from github:
 
 
-    >>> pip install -e git+https://github.com/numan/py-analytics.git#egg=py-analytics
+    >>> pip install -e git+https://github.com/numan/py-analytics.git#egg=analytics
 
 
 
