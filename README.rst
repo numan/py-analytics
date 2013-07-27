@@ -1,4 +1,3 @@
-
 py-analytics
 ============
 
@@ -11,6 +10,22 @@ The project's goal is to make it easy to store and retrieve analytics data. It d
 any means to visualize this data.
 
 Currently, only ``Redis`` is supported for storing data.
+
+Install
+--------
+
+You can install the latest official stable version using pypi:
+
+```
+>> pip install analytics
+```
+
+Or get the latest version directly from github:
+
+```
+>> pip install -e git+https://github.com/numan/py-analytics.git#egg=py-analytics
+```
+
 
 Requirements
 ------------
