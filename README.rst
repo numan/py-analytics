@@ -16,15 +16,14 @@ Install
 
 You can install the latest official stable version using pypi:
 
-``
->> pip install analytics
-``
+   >>> pip install analytics
+
 
 Or get the latest version directly from github:
 
-``
->> pip install -e git+https://github.com/numan/py-analytics.git#egg=py-analytics
-``
+
+    >>> pip install -e git+https://github.com/numan/py-analytics.git#egg=py-analytics
+
 
 
 Requirements
