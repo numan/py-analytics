@@ -337,10 +337,13 @@ class Redis(BaseAnalyticsBackend):
 
     def get_count(self, unique_identifier, metric, start_date=None, end_date=None, **kwargs):
         """
-        Gets the count for the ``metric`` for ``unique_identifier``
+        Gets the count for the ``metric`` for ``unique_identifier``. You can specify a ``start_date``
+        and an ``end_date``, to only get metrics within that time range.
 
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track
+        :param start_date: Get the specified metrics after this date
+        :param end_date: Get the sepcified metrics before this date
         :return: The count for the metric, 0 otherwise
         """
         result = None
