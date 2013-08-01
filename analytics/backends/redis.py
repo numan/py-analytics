@@ -19,6 +19,7 @@ from analytics.backends.base import BaseAnalyticsBackend
 
 from nydus.db import create_cluster
 
+from calendar import monthrange
 from dateutil.relativedelta import relativedelta
 from dateutil import rrule
 
@@ -139,6 +140,13 @@ class Redis(BaseAnalyticsBackend):
             formatted_result_list)
 
         return set(series), merged_values
+
+    def _num_weeks(self, start_date, end_date):
+        closest_monday = self._get_closest_week(start_date)
+        return ((end_date - closest_monday).days / 7) + 1
+
+    def _num_months(self, start_date, end_date):
+        return ((end_date.year - start_date.year) * 12) + (end_date.month - start_date.month) + 1
 
     def clear_all(self):
         """
@@ -286,7 +294,7 @@ class Redis(BaseAnalyticsBackend):
             first_of_month, relativedelta(months=limit))
 
         date_generator = (first_of_month + relativedelta(months=i) for i in itertools.count())
-        #generate a list of mondays in between the start date and the end date
+        #generate a list of first_of_month's in between the start date and the end date
         series = list(itertools.islice(date_generator, limit))
 
         metric_keys = [self._get_monthly_metric_name(metric, month_date) for month_date in series]
@@ -407,3 +415,81 @@ class Redis(BaseAnalyticsBackend):
             parsed_results.append(parsed_result)
 
         return parsed_results
+
+    def set_metric_by_day(self, unique_identifier, metric, date, count, sync_arg, **kwargs):
+        """
+        Sets the count for the ``metric`` for ``unique_identifier``.
+        You must specify a ``date`` for the ``count`` to be set on.
+
+        The redis backend supports lists for both ``unique_identifier`` and ``metric`` allowing for the setting of 
+        multiple metrics for multiple unique_identifiers efficiently. Not all backends may support this.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param date: Sets the specified metrics for this date
+        :param count: Sets the sepcified metrics to value of count
+        :param sync_arg: Boolean used to determine if week and month counters should be updated as well
+        """
+        metric = [metric] if isinstance(metric, basestring) else metric
+        unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
+        with self._analytics_backend.map() as conn:
+            for uid in unique_identifier:
+                hash_key_daily = self._get_daily_metric_key(uid, date)
+
+                for single_metric in metric:
+                    daily_metric_name = self._get_daily_metric_name(single_metric, date)
+                    conn.hset(hash_key_daily, daily_metric_name, count)
+                    if sync_arg:
+                        self.sync_agg_metric(unique_identifier, metric, date, date)
+
+    def sync_agg_metric(self, unique_identifier, metric, start_date, end_date, **kwargs):
+        """
+        Uses the count for each day in the date range to recalculate the values for the associated weeks and months for
+        the ``metric`` for ``unique_identifier``.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param start_date: Date syncing starts
+        :param end_date: Date syncing end
+        """
+        self.sync_week_metric(unique_identifier, metric, start_date, end_date)
+        self.sync_month_metric(unique_identifier, metric, start_date, end_date)
+
+    def sync_week_metric(self, unique_identifier, metric, start_date, end_date):
+        closest_monday_from_date = self._get_closest_week(start_date)
+        num_weeks = self._num_weeks(start_date, end_date)
+        metric_key_date_range = self._get_weekly_date_range(closest_monday_from_date, datetime.timedelta(weeks=num_weeks))
+
+        week_date_generator = (closest_monday_from_date + datetime.timedelta(days=i) for i in itertools.count(step=7))
+        #generate a list of mondays in between the start date and the end date
+        weeks_to_update = list(itertools.islice(week_date_generator, num_weeks))
+        for week in weeks_to_update:
+            week_counter = 0
+            for key, value in self.get_metric_by_day(unique_identifier, metric, week, 7)[1].items():
+                week_counter += value
+
+            hash_key_weekly = self._get_weekly_metric_key(unique_identifier, week)
+            weekly_metric_name = self._get_weekly_metric_name(metric, week)
+            with self._analytics_backend.map() as conn:
+                conn.hset(hash_key_weekly, weekly_metric_name, week_counter)
+
+
+    def sync_month_metric(self, unique_identifier, metric, start_date, end_date):
+        num_months = self._num_months(start_date, end_date)
+        first_of_month = datetime.date(year=start_date.year, month=start_date.month, day=1)
+        metric_key_date_range = self._get_weekly_date_range(
+            first_of_month, relativedelta(months=num_months))
+
+        month_date_generator = (first_of_month + relativedelta(months=i) for i in itertools.count())
+        #generate a list of first_of_month's in between the start date and the end date
+        months_to_update = list(itertools.islice(month_date_generator, num_months))
+
+        for month in months_to_update:
+            month_counter = 0
+            for key, value in self.get_metric_by_day(unique_identifier, metric, month, monthrange(month.year, month.month)[1])[1].items():
+                month_counter += value
+
+            hash_key_monthly = self._get_monthly_metric_name(unique_identifier, month)
+            monthly_metric_name = self._get_weekly_metric_name(metric, month)
+            with self._analytics_backend.map() as conn:
+                conn.hset(hash_key_monthly, monthly_metric_name, month_counter)
