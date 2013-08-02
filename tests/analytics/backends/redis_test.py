@@ -592,3 +592,184 @@ class TestRedisAnalyticsBackend(object):
         eq_(values["2012-04-16"], 3)
         eq_(values["2012-04-23"], 0)
         eq_(values["2012-04-30"], 1)
+
+    def test_set_metric_by_day_no_sync(self):
+        date = datetime.date(year=2011, month=12, day=1)
+        user_id = 1234
+        metric = "metric1"
+        from_date = datetime.date(year=2012, month=4, day=2)
+
+        #set some metrics
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=5), 2))
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=8), 3))
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=30), 5))
+        
+        series, values = self._backend.get_metric_by_day(user_id, metric, date, 30)
+
+        eq_(len(series), 30)
+        eq_(len(values.keys()), 30)
+        eq_(values["2011-12-05"], 2)
+        eq_(values["2011-12-08"], 3)
+        eq_(values["2011-12-30"], 5)
+
+
+    def test_set_metric_by_day_no_sync_incr_then_set(self):
+        date = datetime.date(year=2011, month=12, day=1)
+        user_id = 1234
+        metric = "metric1"
+        from_date = datetime.date(year=2012, month=4, day=2)
+
+        #track some metrics
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=30), inc_amt=5))
+
+        #set some metrics
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=5), 1))
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=8), 2))
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=30), 4))
+        
+        series, values = self._backend.get_metric_by_day(user_id, metric, date, 30)
+
+        eq_(len(series), 30)
+        eq_(len(values.keys()), 30)
+        eq_(values["2011-12-05"], 1)
+        eq_(values["2011-12-08"], 2)
+        eq_(values["2011-12-30"], 4)
+
+    def test_set_metric_by_day_no_sync_set_then_incr(self):
+        date = datetime.date(year=2011, month=12, day=1)
+        user_id = 1234
+        metric = "metric1"
+        from_date = datetime.date(year=2012, month=4, day=2)
+
+        #set some metrics
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=5), 1))
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=8), 2))
+        ok_(self._backend.set_metric_by_day(user_id, metric, datetime.datetime(year=2011, month=12, day=30), 4))
+
+        #track some metrics
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=8), inc_amt=3))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2011, month=12, day=30), inc_amt=5))
+        
+        series, values = self._backend.get_metric_by_day(user_id, metric, date, 30)
+
+        eq_(len(series), 30)
+        eq_(len(values.keys()), 30)
+        eq_(values["2011-12-05"], 3)
+        eq_(values["2011-12-08"], 5)
+        eq_(values["2011-12-30"], 9)
+
+    def test_set_metric_by_day_no_sync_multiple_metrics_at_the_same_time(self):
+        date = datetime.date(year=2011, month=12, day=1)
+        user_id = "user1234"
+        metric = "badges:21"
+        metric2 = "badge:22"
+
+        #set some metrics
+        ok_(self._backend.set_metric_by_day(user_id, [metric, metric2], datetime.datetime(year=2011, month=12, day=5), 2))
+        ok_(self._backend.set_metric_by_day(user_id, [metric, metric2], datetime.datetime(year=2011, month=12, day=8), 3))
+        ok_(self._backend.set_metric_by_day(user_id, [metric, metric2], datetime.datetime(year=2011, month=12, day=30), 5))
+
+        results = self._backend.get_metrics([(user_id, metric,), (user_id, metric2,)], date, limit=30, group_by="day")
+
+        #metric
+        eq_(len(results[0][0]), 30)
+        eq_(len(results[0][1].keys()), 30)
+        eq_(results[0][1]["2011-12-05"], 2)
+        eq_(results[0][1]["2011-12-08"], 3)
+        eq_(results[0][1]["2011-12-30"], 5)
+
+        #metric 2
+        eq_(len(results[1][0]), 30)
+        eq_(len(results[1][1].keys()), 30)
+        eq_(results[1][1]["2011-12-05"], 2)
+        eq_(results[1][1]["2011-12-08"], 3)
+        eq_(results[1][1]["2011-12-30"], 5)
+
+    def test_set_metric_by_day_for_multi_users_at_the_same_time_with_sync(self):
+        user_id = 1234
+        user_id2 = "user:5678"
+        metric = "badge:25"
+        from_date = datetime.date(year=2012, month=4, day=2)
+
+        #set some metrics
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], metric, datetime.datetime(year=2012, month=4, day=5), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], metric, datetime.datetime(year=2012, month=4, day=7), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], metric, datetime.datetime(year=2012, month=4, day=9), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], metric, datetime.datetime(year=2012, month=4, day=11), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], metric, datetime.datetime(year=2012, month=4, day=18), 3, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], metric, datetime.datetime(year=2012, month=4, day=30), 1, True))
+
+        series, values = self._backend.get_metric_by_week(user_id, metric, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-02"], 4)
+        eq_(values["2012-04-09"], 4)
+        eq_(values["2012-04-16"], 3)
+        eq_(values["2012-04-23"], 0)
+        eq_(values["2012-04-30"], 1)
+
+        series, values = self._backend.get_metric_by_week(user_id2, metric, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-02"], 4)
+        eq_(values["2012-04-09"], 4)
+        eq_(values["2012-04-16"], 3)
+        eq_(values["2012-04-23"], 0)
+        eq_(values["2012-04-30"], 1)
+
+        series, values = self._backend.get_metric_by_month(user_id, metric, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-01"], 12)
+
+        series, values = self._backend.get_metric_by_month(user_id2, metric, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-01"], 12)
+
+
+    def test_track_multi_metrics_for_multi_users_at_the_same_time(self):
+        user_id = 1234
+        user_id2 = "user:5678"
+        metric = "metric1"
+        metric2 = "metric2"
+        from_date = datetime.date(year=2012, month=4, day=2)
+
+        #set some metrics
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], [metric, metric2], datetime.datetime(year=2012, month=4, day=5), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], [metric, metric2], datetime.datetime(year=2012, month=4, day=7), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], [metric, metric2], datetime.datetime(year=2012, month=4, day=9), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], [metric, metric2], datetime.datetime(year=2012, month=4, day=11), 2, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], [metric, metric2], datetime.datetime(year=2012, month=4, day=18), 3, True))
+        ok_(self._backend.set_metric_by_day([user_id, user_id2], [metric, metric2], datetime.datetime(year=2012, month=4, day=30), 1, True))
+
+        series, values = self._backend.get_metric_by_week(user_id, metric, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-02"], 4)
+        eq_(values["2012-04-09"], 4)
+        eq_(values["2012-04-16"], 3)
+        eq_(values["2012-04-23"], 0)
+        eq_(values["2012-04-30"], 1)
+
+        series, values = self._backend.get_metric_by_week(user_id2, metric, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-02"], 4)
+        eq_(values["2012-04-09"], 4)
+        eq_(values["2012-04-16"], 3)
+        eq_(values["2012-04-23"], 0)
+        eq_(values["2012-04-30"], 1)
+
+        series, values = self._backend.get_metric_by_week(user_id, metric2, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-02"], 4)
+        eq_(values["2012-04-09"], 4)
+        eq_(values["2012-04-16"], 3)
+        eq_(values["2012-04-23"], 0)
+        eq_(values["2012-04-30"], 1)
+
+        series, values = self._backend.get_metric_by_week(user_id2, metric2, from_date, limit=5)
+        eq_(len(series), 5)
+        eq_(values["2012-04-02"], 4)
+        eq_(values["2012-04-09"], 4)
+        eq_(values["2012-04-16"], 3)
+        eq_(values["2012-04-23"], 0)
+        eq_(values["2012-04-30"], 1)
