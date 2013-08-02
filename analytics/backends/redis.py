@@ -175,17 +175,15 @@ class Redis(BaseAnalyticsBackend):
         """
         return self._analytics_backend.incr(self._prefix + ":" + "analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
 
-    def track_metric(self, unique_identifier, metric, date, inc_amt=1, **kwargs):
+    def track_metric(self, unique_identifier, metric, date=datetime.date.today(), inc_amt=1, **kwargs):
         """
         Tracks a metric for a specific ``unique_identifier`` for a certain date. The redis backend supports
         lists for both ``unique_identifier`` and ``metric`` allowing for tracking of multiple metrics for multiple
         unique_identifiers efficiently. Not all backends may support this.
 
-        TODO: Possibly default date to the current date.
-
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track. This can be a list or a string.
-        :param date: A python date object indicating when this event occured
+        :param date: A python date object indicating when this event occured. Defaults to today.
         :param inc_amt: The amount you want to increment the ``metric`` for the ``unique_identifier``
         :return: ``True`` if successful ``False`` otherwise
         """
@@ -416,10 +414,10 @@ class Redis(BaseAnalyticsBackend):
 
         return parsed_results
 
-    def set_metric_by_day(self, unique_identifier, metric, date, count, sync_arg=False, **kwargs):
+    def set_metric_by_day(self, unique_identifier, metric, date, count, sync_agg=True, update_counter=True, **kwargs):
         """
         Sets the count for the ``metric`` for ``unique_identifier``.
-        You must specify a ``date`` for the ``count`` to be set on.
+        You must specify a ``date`` for the ``count`` to be set on. Useful for resetting a metric count to 0 or decrementing a metric.
 
         The redis backend supports lists for both ``unique_identifier`` and ``metric`` allowing for the setting of 
         multiple metrics for multiple unique_identifiers efficiently. Not all backends may support this.
@@ -428,22 +426,33 @@ class Redis(BaseAnalyticsBackend):
         :param metric: A unique name for the metric you want to track
         :param date: Sets the specified metrics for this date
         :param count: Sets the sepcified metrics to value of count
-        :param sync_arg: Boolean used to determine if week and month counters should be updated
+        :param sync_arg: Boolean used to determine if week and month metrics should be updated
+        :param sync_arg: Boolean used to determine if overall counter should be updated
         """
+        conn = kwargs.get("connection", None)
         metric = [metric] if isinstance(metric, basestring) else metric
         unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
         results = []
-        with self._analytics_backend.map() as conn:
-            for uid in unique_identifier:
-                hash_key_daily = self._get_daily_metric_key(uid, date)
+        if conn is not None:
+            results = metric_func(conn)
+        else:
+            with self._analytics_backend.map() as conn:
+                for uid in unique_identifier:
+                    hash_key_daily = self._get_daily_metric_key(uid, date)
 
-                for single_metric in metric:
-                    daily_metric_name = self._get_daily_metric_name(single_metric, date)
-                    results.append([conn.hset(hash_key_daily, daily_metric_name, count)])
+                    for single_metric in metric:
+                        daily_metric_name = self._get_daily_metric_name(single_metric, date)
+
+                        if update_counter:  # updates overall counter for metric
+                            overall_count = self.get_count(uid, single_metric)
+                            day, daily_count = self.get_metric_by_day(uid, single_metric, date, 1)[1].popitem()
+                            self._analytics_backend.set(self._prefix + ":" + "analy:%s:count:%s" % (uid, single_metric), overall_count + (count - daily_count))
+
+                        results.append([conn.hset(hash_key_daily, daily_metric_name, count)])
 
         for uid in unique_identifier:
             for single_metric in metric:
-                if sync_arg:
+                if sync_agg:
                     self.sync_agg_metric(uid, single_metric, date, date)
 
         return results
@@ -464,7 +473,7 @@ class Redis(BaseAnalyticsBackend):
         self.sync_week_metric(unique_identifier, metric, start_date, end_date)
         self.sync_month_metric(unique_identifier, metric, start_date, end_date)
 
-    def sync_week_metric(self, unique_identifier, metric, start_date, end_date):
+    def sync_week_metric(self, unique_identifier, metric, start_date, end_date, **kwargs):
         """
         Uses the count for each day in the date range to recalculate the counters for the weeks for
         the ``metric`` for ``unique_identifier``. Useful for updating the counters for week and month
@@ -478,6 +487,7 @@ class Redis(BaseAnalyticsBackend):
         :param start_date: Date syncing starts
         :param end_date: Date syncing end
         """
+        conn = kwargs.get("connection", None)
         metric = [metric] if isinstance(metric, basestring) else metric
         unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
         closest_monday_from_date = self._get_closest_week(start_date)
@@ -496,10 +506,13 @@ class Redis(BaseAnalyticsBackend):
 
                     hash_key_weekly = self._get_weekly_metric_key(uid, week)
                     weekly_metric_name = self._get_weekly_metric_name(single_metric, week)
-                    with self._analytics_backend.map() as conn:
-                        conn.hset(hash_key_weekly, weekly_metric_name, week_counter)
+                    if conn is not None:
+                        results = metric_func(conn)
+                    else:
+                        with self._analytics_backend.map() as conn:
+                            conn.hset(hash_key_weekly, weekly_metric_name, week_counter)
 
-    def sync_month_metric(self, unique_identifier, metric, start_date, end_date):
+    def sync_month_metric(self, unique_identifier, metric, start_date, end_date, **kwargs):
         """
         Uses the count for each day in the date range to recalculate the counters for the months for
         the ``metric`` for ``unique_identifier``. Useful for updating the counters for week and month after using set_metric_by_day.
@@ -512,6 +525,7 @@ class Redis(BaseAnalyticsBackend):
         :param start_date: Date syncing starts
         :param end_date: Date syncing end
         """
+        conn = kwargs.get("connection", None)
         metric = [metric] if isinstance(metric, basestring) else metric
         unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
         num_months = self._num_months(start_date, end_date)
@@ -531,5 +545,8 @@ class Redis(BaseAnalyticsBackend):
 
                     hash_key_monthly = self._get_weekly_metric_key(uid, month)
                     monthly_metric_name = self._get_monthly_metric_name(single_metric, month)
-                    with self._analytics_backend.map() as conn:
-                        conn.hset(hash_key_monthly, monthly_metric_name, month_counter)
+                    if conn is not None:
+                        results = metric_func(conn)
+                    else:
+                        with self._analytics_backend.map() as conn:
+                            conn.hset(hash_key_monthly, monthly_metric_name, month_counter)
