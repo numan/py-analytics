@@ -111,7 +111,7 @@ Example Usage
     #set a metric count for a day
     analytics.set_metric_by_day("user:1245", "login", year_ago, 100)
 
-    #sync metrics for week and month after changing setting day
+    #sync metrics for week and month after setting day
     analytics.sync_agg_metric("user:1245", "login", year_ago, datetime.date.today())
 
     #retrieve a count
