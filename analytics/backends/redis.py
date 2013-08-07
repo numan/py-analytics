@@ -175,7 +175,7 @@ class Redis(BaseAnalyticsBackend):
         """
         return self._analytics_backend.incr(self._prefix + ":" + "analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
 
-    def track_metric(self, unique_identifier, metric, date=datetime.date.today(), inc_amt=1, **kwargs):
+    def track_metric(self, unique_identifier, metric, date=None, inc_amt=1, **kwargs):
         """
         Tracks a metric for a specific ``unique_identifier`` for a certain date. The redis backend supports
         lists for both ``unique_identifier`` and ``metric`` allowing for tracking of multiple metrics for multiple
@@ -190,6 +190,8 @@ class Redis(BaseAnalyticsBackend):
         metric = [metric] if isinstance(metric, basestring) else metric
         unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
         results = []
+        if date is None:
+            date = datetime.date.today()
         with self._analytics_backend.map() as conn:
             for uid in unique_identifier:
 
@@ -426,8 +428,8 @@ class Redis(BaseAnalyticsBackend):
         :param metric: A unique name for the metric you want to track
         :param date: Sets the specified metrics for this date
         :param count: Sets the sepcified metrics to value of count
-        :param sync_arg: Boolean used to determine if week and month metrics should be updated
-        :param sync_arg: Boolean used to determine if overall counter should be updated
+        :param sync_agg: Boolean used to determine if week and month metrics should be updated
+        :param update_counter: Boolean used to determine if overall counter should be updated
         """
         metric = [metric] if isinstance(metric, basestring) else metric
         unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
