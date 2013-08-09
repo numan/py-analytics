@@ -19,6 +19,7 @@ from analytics.backends.base import BaseAnalyticsBackend
 
 from nydus.db import create_cluster
 
+from calendar import monthrange
 from dateutil.relativedelta import relativedelta
 from dateutil import rrule
 
@@ -140,6 +141,13 @@ class Redis(BaseAnalyticsBackend):
 
         return set(series), merged_values
 
+    def _num_weeks(self, start_date, end_date):
+        closest_monday = self._get_closest_week(start_date)
+        return ((end_date - closest_monday).days / 7) + 1
+
+    def _num_months(self, start_date, end_date):
+        return ((end_date.year - start_date.year) * 12) + (end_date.month - start_date.month) + 1
+
     def clear_all(self):
         """
         Deletes all ``sandsnake`` related data from redis.
@@ -167,23 +175,23 @@ class Redis(BaseAnalyticsBackend):
         """
         return self._analytics_backend.incr(self._prefix + ":" + "analy:%s:count:%s" % (unique_identifier, metric), inc_amt)
 
-    def track_metric(self, unique_identifier, metric, date, inc_amt=1, **kwargs):
+    def track_metric(self, unique_identifier, metric, date=None, inc_amt=1, **kwargs):
         """
         Tracks a metric for a specific ``unique_identifier`` for a certain date. The redis backend supports
         lists for both ``unique_identifier`` and ``metric`` allowing for tracking of multiple metrics for multiple
         unique_identifiers efficiently. Not all backends may support this.
 
-        TODO: Possibly default date to the current date.
-
         :param unique_identifier: Unique string indetifying the object this metric is for
         :param metric: A unique name for the metric you want to track. This can be a list or a string.
-        :param date: A python date object indicating when this event occured
+        :param date: A python date object indicating when this event occured. Defaults to today.
         :param inc_amt: The amount you want to increment the ``metric`` for the ``unique_identifier``
         :return: ``True`` if successful ``False`` otherwise
         """
         metric = [metric] if isinstance(metric, basestring) else metric
         unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
         results = []
+        if date is None:
+            date = datetime.date.today()
         with self._analytics_backend.map() as conn:
             for uid in unique_identifier:
 
@@ -286,7 +294,7 @@ class Redis(BaseAnalyticsBackend):
             first_of_month, relativedelta(months=limit))
 
         date_generator = (first_of_month + relativedelta(months=i) for i in itertools.count())
-        #generate a list of mondays in between the start date and the end date
+        #generate a list of first_of_month's in between the start date and the end date
         series = list(itertools.islice(date_generator, limit))
 
         metric_keys = [self._get_monthly_metric_name(metric, month_date) for month_date in series]
@@ -407,3 +415,124 @@ class Redis(BaseAnalyticsBackend):
             parsed_results.append(parsed_result)
 
         return parsed_results
+
+    def set_metric_by_day(self, unique_identifier, metric, date, count, sync_agg=True, update_counter=True):
+        """
+        Sets the count for the ``metric`` for ``unique_identifier``.
+        You must specify a ``date`` for the ``count`` to be set on. Useful for resetting a metric count to 0 or decrementing a metric.
+
+        The redis backend supports lists for both ``unique_identifier`` and ``metric`` allowing for the setting of 
+        multiple metrics for multiple unique_identifiers efficiently. Not all backends may support this.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param date: Sets the specified metrics for this date
+        :param count: Sets the sepcified metrics to value of count
+        :param sync_agg: Boolean used to determine if week and month metrics should be updated
+        :param update_counter: Boolean used to determine if overall counter should be updated
+        """
+        metric = [metric] if isinstance(metric, basestring) else metric
+        unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
+        results = []
+        with self._analytics_backend.map() as conn:
+            for uid in unique_identifier:
+                hash_key_daily = self._get_daily_metric_key(uid, date)
+
+                for single_metric in metric:
+                    daily_metric_name = self._get_daily_metric_name(single_metric, date)
+
+                    if update_counter:  # updates overall counter for metric
+                        overall_count = self.get_count(uid, single_metric)
+                        day, daily_count = self.get_metric_by_day(uid, single_metric, date, 1)[1].popitem()
+                        self._analytics_backend.set(self._prefix + ":" + "analy:%s:count:%s" % (uid, single_metric), overall_count + (count - daily_count))
+
+                    results.append([conn.hset(hash_key_daily, daily_metric_name, count)])
+
+        if sync_agg:
+            self.sync_agg_metric(unique_identifier, metric, date, date)
+
+        return results
+
+    def sync_agg_metric(self, unique_identifier, metric, start_date, end_date):
+        """
+        Uses the count for each day in the date range to recalculate the counters for the associated weeks and months for
+        the ``metric`` for ``unique_identifier``. Useful for updating the counters for week and month after using set_metric_by_day.
+
+        The redis backend supports lists for both ``unique_identifier`` and ``metric`` allowing for the setting of 
+        multiple metrics for multiple unique_identifiers efficiently. Not all backends may support this.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param start_date: Date syncing starts
+        :param end_date: Date syncing end
+        """
+        self.sync_week_metric(unique_identifier, metric, start_date, end_date)
+        self.sync_month_metric(unique_identifier, metric, start_date, end_date)
+
+    def sync_week_metric(self, unique_identifier, metric, start_date, end_date):
+        """
+        Uses the count for each day in the date range to recalculate the counters for the weeks for
+        the ``metric`` for ``unique_identifier``. Useful for updating the counters for week and month
+        after using set_metric_by_day.
+
+        The redis backend supports lists for both ``unique_identifier`` and ``metric`` allowing for the setting of 
+        multiple metrics for multiple unique_identifiers efficiently. Not all backends may support this.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param start_date: Date syncing starts
+        :param end_date: Date syncing end
+        """
+        metric = [metric] if isinstance(metric, basestring) else metric
+        unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
+        closest_monday_from_date = self._get_closest_week(start_date)
+        num_weeks = self._num_weeks(start_date, end_date)
+        metric_key_date_range = self._get_weekly_date_range(closest_monday_from_date, datetime.timedelta(weeks=num_weeks))
+
+        week_date_generator = (closest_monday_from_date + datetime.timedelta(days=i) for i in itertools.count(step=7))
+        #generate a list of mondays in between the start date and the end date
+        weeks_to_update = list(itertools.islice(week_date_generator, num_weeks))
+        for uid in unique_identifier:
+            for single_metric in metric:
+                for week in weeks_to_update:
+                    _, series_results = self.get_metric_by_day(uid, single_metric, from_date=week, limit=7)
+                    week_counter = sum([value for key, value in series_results.items()])
+
+                    hash_key_weekly = self._get_weekly_metric_key(uid, week)
+                    weekly_metric_name = self._get_weekly_metric_name(single_metric, week)
+                    with self._analytics_backend.map() as conn:
+                        conn.hset(hash_key_weekly, weekly_metric_name, week_counter)
+
+    def sync_month_metric(self, unique_identifier, metric, start_date, end_date):
+        """
+        Uses the count for each day in the date range to recalculate the counters for the months for
+        the ``metric`` for ``unique_identifier``. Useful for updating the counters for week and month after using set_metric_by_day.
+
+        The redis backend supports lists for both ``unique_identifier`` and ``metric`` allowing for the setting of 
+        multiple metrics for multiple unique_identifiers efficiently. Not all backends may support this.
+
+        :param unique_identifier: Unique string indetifying the object this metric is for
+        :param metric: A unique name for the metric you want to track
+        :param start_date: Date syncing starts
+        :param end_date: Date syncing end
+        """
+        metric = [metric] if isinstance(metric, basestring) else metric
+        unique_identifier = [unique_identifier] if not isinstance(unique_identifier, (types.ListType, types.TupleType, types.GeneratorType,)) else unique_identifier
+        num_months = self._num_months(start_date, end_date)
+        first_of_month = datetime.date(year=start_date.year, month=start_date.month, day=1)
+        metric_key_date_range = self._get_weekly_date_range(
+            first_of_month, relativedelta(months=num_months))
+
+        month_date_generator = (first_of_month + relativedelta(months=i) for i in itertools.count())
+        #generate a list of first_of_month's in between the start date and the end date
+        months_to_update = list(itertools.islice(month_date_generator, num_months))
+        for uid in unique_identifier:
+            for single_metric in metric:
+                for month in months_to_update:
+                    _, series_results = self.get_metric_by_day(uid, single_metric, from_date=month, limit=monthrange(month.year, month.month)[1])
+                    month_counter = sum([value for key, value in series_results.items()])
+
+                    hash_key_monthly = self._get_weekly_metric_key(uid, month)
+                    monthly_metric_name = self._get_monthly_metric_name(single_metric, month)
+                    with self._analytics_backend.map() as conn:
+                        conn.hset(hash_key_monthly, monthly_metric_name, month_counter)
