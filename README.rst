@@ -84,7 +84,7 @@ Example Usage
         },
     })
 
-    year_ago = datetime.date.today() - datetime.timedelta(days=265)
+    year_ago = datetime.date.today() - datetime.timedelta(days=365)
 
     #create some analytics data
     analytics.track_metric("user:1234", "comment", year_ago)
