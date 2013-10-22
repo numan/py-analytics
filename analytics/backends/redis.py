@@ -354,6 +354,7 @@ class Redis(BaseAnalyticsBackend):
         :param end_date: Get the sepcified metrics before this date
         :return: The count for the metric, 0 otherwise
         """
+        conn = kwargs.get("connection", None)
         result = None
         if start_date and end_date:
             start_date, end_date = (start_date, end_date,) if start_date < end_date else (end_date, start_date,)
@@ -365,15 +366,14 @@ class Redis(BaseAnalyticsBackend):
 
             #We can sorta optimize this by getting most of the data by month
             if len(monthly_metrics_dates) >= 3:
-                start_diff = monthly_metrics_dates[0] - start_date
-                end_diff = end_date - monthly_metrics_dates[-1]
 
-                with self._analytics_backend.map() as conn:
-                    monthly_metric_series, monthly_metric_results = self.get_metric_by_month(unique_identifier, metric, monthly_metrics_dates[0], limit=len(monthly_metrics_dates) - 1, connection=conn)
-
-                    #get the difference from the date to the start date and get all dates in between
-                    starting_metric_series, starting_metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=start_diff.days, connection=conn) if start_diff.days > 0 else ([], [[]],)
-                    ending_metric_series, ending_metric_results = self.get_metric_by_day(unique_identifier, metric, monthly_metrics_dates[-1], limit=end_diff.days + 1, connection=conn)
+                if conn is not None:
+                    monthly_metric_series, monthly_metric_results, starting_metric_series, starting_metric_results, ending_metric_series, ending_metric_results = self._get_counts(
+                        conn, metric, unique_identifier, monthly_metrics_dates, start_date, end_date)
+                else:
+                    with self._analytics_backend.map() as conn:
+                        monthly_metric_series, monthly_metric_results, starting_metric_series, starting_metric_results, ending_metric_series, ending_metric_results = self._get_counts(
+                            conn, metric, unique_identifier, monthly_metrics_dates, start_date, end_date)
 
                 monthly_metric_series, monthly_metric_results = self._parse_and_process_metrics(monthly_metric_series, monthly_metric_results)
                 starting_metric_series, starting_metric_results = self._parse_and_process_metrics(starting_metric_series, starting_metric_results)
@@ -403,7 +403,7 @@ class Redis(BaseAnalyticsBackend):
         parsed_results = []
         with self._analytics_backend.map() as conn:
             results = [
-                conn.get(self._prefix + ":" + "analy:%s:count:%s" % (unique_identifier, metric,)) for
+                self.get_count(unique_identifier, metric, connection=conn, **kwargs) for
                 unique_identifier, metric in metric_identifiers]
 
         for result in results:
@@ -536,3 +536,15 @@ class Redis(BaseAnalyticsBackend):
                     monthly_metric_name = self._get_monthly_metric_name(single_metric, month)
                     with self._analytics_backend.map() as conn:
                         conn.hset(hash_key_monthly, monthly_metric_name, month_counter)
+
+    def _get_counts(self, conn, metric, unique_identifier, monthly_metrics_dates, start_date, end_date):
+        start_diff = monthly_metrics_dates[0] - start_date
+        end_diff = end_date - monthly_metrics_dates[-1]
+
+        monthly_metric_series, monthly_metric_results = self.get_metric_by_month(unique_identifier, metric, monthly_metrics_dates[0], limit=len(monthly_metrics_dates) - 1, connection=conn)
+
+        #get the difference from the date to the start date and get all dates in between
+        starting_metric_series, starting_metric_results = self.get_metric_by_day(unique_identifier, metric, start_date, limit=start_diff.days, connection=conn) if start_diff.days > 0 else ([], [[]],)
+        ending_metric_series, ending_metric_results = self.get_metric_by_day(unique_identifier, metric, monthly_metrics_dates[-1], limit=end_diff.days + 1, connection=conn)
+
+        return monthly_metric_series, monthly_metric_results, starting_metric_series, starting_metric_results, ending_metric_series, ending_metric_results

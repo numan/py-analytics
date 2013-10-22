@@ -170,6 +170,26 @@ class TestRedisAnalyticsBackend(object):
         eq_(counts[1], 3)
         eq_(counts[2], 0)
 
+    def test_get_counts_with_time_period(self):
+        start_date = datetime.date(year=2012, month=4, day=6)
+        end_date = datetime.date(year=2012, month=4, day=11)
+
+        user_id = "user1234"
+        metric = "badges:21"
+        metric2 = "badge:22"
+
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=5), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=7), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=9), inc_amt=2))
+        ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2012, month=4, day=11), inc_amt=2))
+
+        counts = self._backend.get_counts([(user_id, metric,), (user_id, metric2,)], start_date=start_date, end_date=end_date)
+
+        #check the counts for each of the metrics
+        eq_(len(counts), 2)
+        eq_(counts[0], 4)
+        eq_(counts[1], 2)
+
     def test_clear_all(self):
         user_id = 1234
         metric = "badge:25"
@@ -420,7 +440,9 @@ class TestRedisAnalyticsBackend(object):
         self._backend.get_metrics([], date, group_by="leapyear")
 
     def test_get_count_in_time_period(self):
-        date = datetime.date(year=2011, month=12, day=1)
+        start_date = datetime.date(year=2012, month=4, day=5)
+        end_date = datetime.date(year=2012, month=4, day=9)
+
         user_id = "user1234"
         metric = "badges:21"
         metric2 = "badge:22"
@@ -429,6 +451,9 @@ class TestRedisAnalyticsBackend(object):
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=7), inc_amt=2))
         ok_(self._backend.track_metric(user_id, metric, datetime.datetime(year=2012, month=4, day=9), inc_amt=2))
         ok_(self._backend.track_metric(user_id, metric2, datetime.datetime(year=2012, month=4, day=11), inc_amt=2))
+
+        count = self._backend.get_count(user_id, metric, start_date=start_date, end_date=end_date)
+        eq_(6, count)
 
     def test_get_metrics_by_day(self):
         date = datetime.date(year=2011, month=12, day=1)
