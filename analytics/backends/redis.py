@@ -354,7 +354,6 @@ class Redis(BaseAnalyticsBackend):
         :param end_date: Get the sepcified metrics before this date
         :return: The count for the metric, 0 otherwise
         """
-        conn = kwargs.get("connection", None)
         result = None
         if start_date and end_date:
             start_date, end_date = (start_date, end_date,) if start_date < end_date else (end_date, start_date,)
@@ -367,11 +366,7 @@ class Redis(BaseAnalyticsBackend):
             #We can sorta optimize this by getting most of the data by month
             if len(monthly_metrics_dates) >= 3:
 
-                if conn is not None:
-                    monthly_metric_series, monthly_metric_results, starting_metric_series, starting_metric_results, ending_metric_series, ending_metric_results = self._get_counts(
-                        conn, metric, unique_identifier, monthly_metrics_dates, start_date, end_date)
-                else:
-                    with self._analytics_backend.map() as conn:
+                with self._analytics_backend.map() as conn:
                         monthly_metric_series, monthly_metric_results, starting_metric_series, starting_metric_results, ending_metric_series, ending_metric_results = self._get_counts(
                             conn, metric, unique_identifier, monthly_metrics_dates, start_date, end_date)
 
@@ -401,10 +396,9 @@ class Redis(BaseAnalyticsBackend):
         For example [('user:1', 'people_invited',), ('user:2', 'people_invited',), ('user:1', 'comments_posted',), ('user:2', 'comments_posted',)]
         """
         parsed_results = []
-        with self._analytics_backend.map() as conn:
-            results = [
-                self.get_count(unique_identifier, metric, connection=conn, **kwargs) for
-                unique_identifier, metric in metric_identifiers]
+        results = [
+            self.get_count(unique_identifier, metric, **kwargs) for
+            unique_identifier, metric in metric_identifiers]
 
         for result in results:
             try:
